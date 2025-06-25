@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 const PASSWORDS: Record<string, string> = {
-  adcap: ",_",
-  adcap_99: "@",
-  adcap_1000: ")],",
+  adcap: process.env.PASS_ADCAP!,
+  adcap_99: process.env.PASS_ADCAP_99!,
+  adcap_1000: process.env.PASS_ADCAP_1000!,
 }
+
 
 async function getToken(user: string): Promise<string | null> {
   if (!PASSWORDS[user]) {
