@@ -14,9 +14,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Upload, Plus, Send, RotateCcw, Trash2, X, FileText } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-
-
-
 interface Transaction {
   id: string
   cuotapartista: string
@@ -166,6 +163,9 @@ export default function FundProcessor() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
+  const [passwordPrompt, setPasswordPrompt] = useState("")
+  const [showPasswordDialog, setShowPasswordDialog] = useState<"send" | "delete" | null>(null)
+
 
   // Formulario para nueva transacción
   const [newTransaction, setNewTransaction] = useState({
@@ -191,7 +191,7 @@ export default function FundProcessor() {
     const reader = new FileReader()
     reader.onload = (e) => {
       const content = e.target?.result as string
-      const lines = content.split(/\r?\n|\r/).filter((line) => line.trim())
+      const lines = content.split(/\r?\n/).filter(line => line.trim());
 
       const newTransactions: Transaction[] = lines
       .map((line, index) => {
@@ -557,7 +557,7 @@ export default function FundProcessor() {
                     </div>
 
                     <div className="flex gap-2 pt-4">
-                      <Button onClick={handleDeleteRequest} variant="destructive" className="flex-1">
+                      <Button onClick={() => setShowPasswordDialog("delete")} variant="destructive" className="flex-1">
                         Eliminar
                       </Button>
                       <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="flex-1">
@@ -655,7 +655,7 @@ export default function FundProcessor() {
 
             <div className="flex gap-3">
               <Button
-                onClick={() => processTransactions()}
+                onClick={() => setShowPasswordDialog("send")}
                 disabled={isProcessing || transactions.length === 0}
                 className="bg-green-600 hover:bg-green-700"
               >
@@ -676,6 +676,67 @@ export default function FundProcessor() {
           </div>
         </CardContent>
       </Card>
+      <Dialog open={!!showPasswordDialog} onOpenChange={() => setShowPasswordDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Autenticación requerida</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Label>Clave de seguridad</Label>
+            <Input
+              type="password"
+              value={passwordPrompt}
+              onChange={(e) => setPasswordPrompt(e.target.value)}
+              placeholder="Ingresá tu clave secreta"
+            />
+
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={() => {
+                  const user = showPasswordDialog === "send"
+                    ? transactions[0]?.cuotapartista
+                    : deleteForm.user
+
+                  const claveCorrecta = PASSWORDS[user]
+
+                  if (passwordPrompt !== claveCorrecta) {
+                    toast({
+                      title: "Clave incorrecta",
+                      description: "La clave ingresada no es válida",
+                      variant: "destructive",
+                    })
+                    return
+                  }
+
+                  if (showPasswordDialog === "send") {
+                    processTransactions()
+                  } else {
+                    handleDeleteRequest()
+                  }
+
+                  setShowPasswordDialog(null)
+                  setPasswordPrompt("")
+                }}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                Confirmar
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowPasswordDialog(null)
+                  setPasswordPrompt("")
+                }}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
