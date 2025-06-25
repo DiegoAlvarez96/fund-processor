@@ -15,27 +15,7 @@ import { Upload, Plus, Send, RotateCcw, Trash2, X, FileText } from "lucide-react
 import { useToast } from "@/hooks/use-toast"
 
 
-import { useSession, signIn, signOut } from "next-auth/react"
 
-export default function Home() {
-  const { data: session } = useSession()
-
-  if (!session) {
-    return (
-      <button onClick={() => signIn("microsoft")}>
-        Validarme con Microsoft
-      </button>
-    )
-  }
-
-  return (
-    <>
-      <p>Hola, {session.user?.email}</p>
-      <button onClick={() => signOut()}>Cerrar sesión</button>
-      {/* mostrar formulario solo si está autenticado */}
-    </>
-  )
-}
 
 interface Transaction {
   id: string
