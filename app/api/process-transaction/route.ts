@@ -115,13 +115,6 @@ async function rescatar(
 
 export async function POST(request: NextRequest) {
 
-  const auth = request.headers.get("authorization")
-  if (auth !== `Bearer ${process.env.PROCESADOR_SECRET}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-  }
-  const data = await req.json()
-
-
   
   try {
     const transaction = await request.json()
