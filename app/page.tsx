@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Upload, Plus, Send, RotateCcw, Trash2, X, FileText } from "lucide-react"
+import { Upload, Plus, Send, RotateCcw, Trash2, X, FileText, Lock, Eye, EyeOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface Transaction {
@@ -37,7 +37,6 @@ const FCI_DICT: Record<string, string> = {
   "8": "DINA FCI C",
   "9": "AP FCI A",
   "10": "AP FCI B",
-  // Agregando más entradas del diccionario original
   "17": "RP FCI A",
   "18": "RP FCI B",
   "19": "BAL4 FCI A",
@@ -50,6 +49,13 @@ const FCI_DICT: Record<string, string> = {
 const USERS = ["adcap", "adcap_99", "adcap_1000"]
 
 export default function FundProcessor() {
+  // Estado para autenticación
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [secretKey, setSecretKey] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [authError, setAuthError] = useState("")
+
+  // Estados existentes
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -74,6 +80,120 @@ export default function FundProcessor() {
     requestId: "",
   })
 
+  // Verificar autenticación al cargar
+  useEffect(() => {
+    const savedAuth = localStorage.getItem("fund-processor-auth")
+    if (savedAuth === "authenticated") {
+      setIsAuthenticated(true)
+    }
+  }, [])
+
+  // Función para validar clave secreta
+  const handleAuthentication = async () => {
+    if (!secretKey.trim()) {
+      setAuthError("Por favor ingresa la clave secreta")
+      return
+    }
+
+    try {
+      const response = await fetch("/api/authenticate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secretKey }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setIsAuthenticated(true)
+        setAuthError("")
+        localStorage.setItem("fund-processor-auth", "authenticated")
+        toast({
+          title: "Acceso autorizado",
+          description: "Bienvenido al procesador de fondos",
+        })
+      } else {
+        setAuthError("Clave secreta incorrecta")
+        setSecretKey("")
+      }
+    } catch (error) {
+      setAuthError("Error de conexión")
+    }
+  }
+
+  // Función para cerrar sesión
+  const handleLogout = () => {
+    setIsAuthenticated(false)
+    setSecretKey("")
+    setTransactions([])
+    localStorage.removeItem("fund-processor-auth")
+    toast({
+      title: "Sesión cerrada",
+      description: "Has cerrado sesión correctamente",
+    })
+  }
+
+  // Pantalla de autenticación
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+              <Lock className="w-6 h-6 text-blue-600" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-gray-900">Acceso Restringido</CardTitle>
+            <p className="text-gray-600">Ingresá tu clave secreta para continuar</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="secret">Clave Secreta</Label>
+              <div className="relative">
+                <Input
+                  id="secret"
+                  type={showPassword ? "text" : "password"}
+                  value={secretKey}
+                  onChange={(e) => {
+                    setSecretKey(e.target.value)
+                    setAuthError("")
+                  }}
+                  onKeyPress={(e) => e.key === "Enter" && handleAuthentication()}
+                  placeholder="Ingresa la clave secreta"
+                  className={authError ? "border-red-500" : ""}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </Button>
+              </div>
+              {authError && <p className="text-sm text-red-600">{authError}</p>}
+            </div>
+
+            <Button onClick={handleAuthentication} className="w-full bg-blue-600 hover:bg-blue-700">
+              <Lock className="w-4 h-4 mr-2" />
+              Ingresar
+            </Button>
+
+            <div className="text-center text-sm text-gray-500">
+              <p>Sistema de procesamiento de fondos de inversión</p>
+              <p className="text-xs mt-1">Acceso autorizado únicamente</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Resto de las funciones existentes...
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -277,11 +397,18 @@ export default function FundProcessor() {
     return isNaN(num) ? amount : `$ ${num.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
   }
 
+  // Interfaz principal (autenticado)
   return (
     <div className="container mx-auto p-6 space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">Procesador de Fondos de Inversión</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-2xl font-bold text-center flex-1">Procesador de Fondos de Inversión</CardTitle>
+            <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:text-red-800">
+              <X className="w-4 h-4 mr-2" />
+              Cerrar Sesión
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {/* Botones superiores */}
