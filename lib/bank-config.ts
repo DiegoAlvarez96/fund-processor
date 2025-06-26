@@ -160,29 +160,57 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
   },
 }
 
-// CBUs precargados por tipo de transferencia
+// CBUs precargados por tipo de transferencia y banco
 export const CBU_PRESETS: Record<string, Record<string, Array<{ value: string; label: string }>>> = {
-  "mismo-titular": {
+  "MEP-GC1": {
+    "banco-valores": [{ value: "2990000000002293790008", label: "2990000000002293790008 - AHORRO PESOS" }],
+    "banco-comafi": [{ value: "2990000000002293790008", label: "2990000000002293790008 - AHORRO PESOS" }],
+  },
+  "MEP-DL0": {
     "banco-valores": [
-      { value: "300100000074658", label: "300100000074658 - VALO OPERATIVA PESOS SECUNDARIA" },
-      { value: "300100000134934", label: "300100000134934 - VALO ACDI PESOS" },
-      { value: "900100000134941", label: "900100000134941 - VALO ACDI USD" },
+      { value: "2990000000002307000000", label: "2990000000002307000000 - COMAFI" },
+      { value: "4320001010003415620011", label: "4320001010003415620011 - COMERCIO" },
+    ],
+    "banco-comafi": [
+      { value: "1980001730000001103433", label: "1980001730000001103433 - VALO OPERATIVA" },
+      { value: "4320001010003415620011", label: "4320001010003415620011 - COMERCIO" },
     ],
   },
   "MEP-D20": {
-    "banco-valores": [{ value: "2250", label: "2250 - CUENTA ESPECIAL D20" }],
+    "banco-valores": [
+      { value: "22500", label: "22500 - BYMA" },
+      { value: "22204", label: "22204 - MAE $" },
+      { value: "82500", label: "82500 - BYMA USD" },
+      { value: "82201", label: "82201 - MAE USD" },
+    ],
+    "banco-comafi": [
+      { value: "22500", label: "22500 - BYMA" },
+      { value: "22204", label: "22204 - MAE $" },
+      { value: "82500", label: "82500 - BYMA USD" },
+      { value: "82201", label: "82201 - MAE USD" },
+    ],
   },
-  "MEP-DL0": {
-    "banco-valores": ["2990000000002307000000", "4320001010003415620011"],
-    "banco-comafi": ["0650001010000012345678", "0650001010000087654321"],
-  },
-  "MEP-GC1": {
-    "banco-valores": ["2990000000002293790008", "2990000000015072580211"],
-    "banco-comafi": ["2990000000002293790008", "0650001010000087654321"],
+  "mismo-banco": {
+    "banco-valores": [
+      { value: "300100000144362", label: "300100000144362 - ROFEX" },
+      { value: "300100000074658", label: "300100000074658 - MAV $" },
+      { value: "900100000120030", label: "900100000120030 - MAV USD" },
+    ],
   },
 }
 
-// Cuentas origen disponibles
+// Cuentas origen por banco
+export const CUENTAS_ORIGEN_POR_BANCO: Record<string, Array<{ value: string; label: string }>> = {
+  "banco-valores": [
+    { value: "300100000110343", label: "VALO OPERATIVA PESOS - 300100000110343" },
+    { value: "900100000163333", label: "VALO OPERATIVA USD - 900100000163333" },
+    { value: "300100000134934", label: "VALO ACDI PESOS - 300100000134934" },
+    { value: "900100000134941", label: "VALO ACDI USD - 900100000134941" },
+  ],
+  "banco-comafi": [{ value: "2990000000002307000000", label: "COMAFI PESOS 23070 - 2990000000002307000000" }],
+}
+
+// Cuentas origen disponibles (mantener para compatibilidad)
 export const CUENTAS_ORIGEN = [
   { value: "300100000110343", label: "VALO OPERATIVA PESOS - 300100000110343" },
   { value: "900100000163333", label: "VALO OPERATIVA USD - 900100000163333" },
