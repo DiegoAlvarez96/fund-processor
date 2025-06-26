@@ -22,7 +22,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN } from "@/lib/bank-config"
+import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN, CUENTAS_ORIGEN_MISMO_TITULAR } from "@/lib/bank-config"
 import { generateBankFile, type TransferData, type EcheckData } from "@/lib/file-generators"
 
 interface EcheckEntry {
@@ -279,6 +279,12 @@ export default function BankFileProcessor() {
     })
   }
 
+  // Obtener cuentas origen disponibles según el tipo de transferencia
+  const availableOriginAccounts =
+    transferData.tipoTransferencia === "mismo-titular" && selectedBank === "banco-valores"
+      ? CUENTAS_ORIGEN_MISMO_TITULAR
+      : CUENTAS_ORIGEN
+
   return (
     <div className="space-y-6">
       <div>
@@ -360,7 +366,7 @@ export default function BankFileProcessor() {
                     <SelectValue placeholder="Seleccionar cuenta" />
                   </SelectTrigger>
                   <SelectContent>
-                    {CUENTAS_ORIGEN.map((cuenta) => (
+                    {availableOriginAccounts.map((cuenta) => (
                       <SelectItem key={cuenta.value} value={cuenta.value}>
                         {cuenta.label}
                       </SelectItem>
@@ -383,6 +389,7 @@ export default function BankFileProcessor() {
                     <SelectItem value="mismo-banco">Mismo Banco</SelectItem>
                     {selectedBank === "banco-valores" && (
                       <>
+                        <SelectItem value="mismo-titular">Mismo Titular</SelectItem>
                         <SelectItem value="MEP-DL0">MEP - DL0</SelectItem>
                         <SelectItem value="MEP-GC1">MEP - GC1</SelectItem>
                         <SelectItem value="MEP-D20">MEP - D20</SelectItem>
@@ -409,18 +416,18 @@ export default function BankFileProcessor() {
                 />
                 {availableCBUs.length > 0 && (
                   <div>
-                    <Label className="text-sm text-gray-500">O seleccionar CBU precargado:</Label>
+                    <Label className="text-sm text-gray-500">Seleccionar cuenta destino:</Label>
                     <Select
                       value=""
                       onValueChange={(value) => setTransferData((prev) => ({ ...prev, cbuDestino: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar CBU precargado" />
+                        <SelectValue placeholder="Seleccionar cuenta destino" />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableCBUs.map((cbu) => (
-                          <SelectItem key={cbu} value={cbu}>
-                            {cbu}
+                        {availableCBUs.map((cuenta) => (
+                          <SelectItem key={cuenta.value} value={cuenta.value}>
+                            {cuenta.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
