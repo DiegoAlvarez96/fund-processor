@@ -34,7 +34,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="text-center space-y-4">
             <p className="text-gray-600 text-lg">
-              Procesa suscripciones y rescates de fondoS
+              Procesa suscripciones y rescates de fondos de inversión de manera eficiente
             </p>
             <ul className="text-sm text-gray-500 space-y-2">
               <li>• Operativo para cc 1000, 10119, 9910119</li>
@@ -68,7 +68,6 @@ export default function Dashboard() {
               <li>• BCO COMAFI</li>
               <li>• GENERACION DE TXT PARA ECHEQS MULTIBANCO</li>
             </ul>
-            </ul>
             <Button
               className="w-full bg-green-600 hover:bg-green-700 text-lg py-6"
               onClick={() => handleNavigation("archivos-bancos")}
@@ -84,9 +83,10 @@ export default function Dashboard() {
       <div className="text-center py-8">
         <Card className="max-w-2xl mx-auto bg-gray-50">
           <CardContent className="pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sistema de gestion</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sistema Seguro y Confiable</h3>
             <p className="text-gray-600">
-              sistema en periodo de testing
+              Todas las operaciones están protegidas con autenticación segura y timeout de sesión automático. El sistema
+              mantiene un registro completo de todas las actividades realizadas.
             </p>
           </CardContent>
         </Card>
