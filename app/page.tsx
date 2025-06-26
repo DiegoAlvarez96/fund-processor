@@ -122,11 +122,9 @@ export default function FundProcessor() {
     warningTimerRef.current = setTimeout(() => {
       setShowTimeoutWarning(true)
     }, (SESSION_TIMEOUT_MINUTES - WARNING_MINUTES) * 60 * 1000)
+
+
     
-    toast({
-      title: "Sesión extendida",
-      description: `Tu sesión se ha extendido por ${SESSION_TIMEOUT_MINUTES} minutos más`,
-    })
   }, [toast])
 
   // Función para resetear actividad del usuario
