@@ -22,7 +22,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN, CUENTAS_ORIGEN_MISMO_TITULAR } from "@/lib/bank-config"
+import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN_POR_BANCO } from "@/lib/bank-config"
 import { generateBankFile, type TransferData, type EcheckData } from "@/lib/file-generators"
 
 interface EcheckEntry {
@@ -46,7 +46,7 @@ export default function BankFileProcessor() {
     cuentaOrigen: "",
     cbuDestino: "",
     importeTotal: 0,
-    montoMaximo: 0,
+    montoMaximo: 700000000, // Precargado con 700.000.000
     tipoTransferencia: "",
     banco: "",
   })
@@ -64,6 +64,19 @@ export default function BankFileProcessor() {
 
   const { toast } = useToast()
 
+  // Función para formatear números con separadores de miles
+  const formatNumber = (value: number): string => {
+    return value.toLocaleString("es-AR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  }
+
+  // Función para parsear números desde el formato con separadores
+  const parseNumber = (value: string): number => {
+    return Number.parseFloat(value.replace(/\./g, "").replace(",", ".")) || 0
+  }
+
   // Obtener configuración del banco seleccionado
   const bankConfig = selectedBank ? BANK_CONFIGS[selectedBank] : null
 
@@ -73,12 +86,21 @@ export default function BankFileProcessor() {
       ? CBU_PRESETS[transferData.tipoTransferencia]?.[selectedBank] || []
       : []
 
+  // Obtener cuentas origen disponibles según el banco seleccionado
+  const availableOriginAccounts = selectedBank ? CUENTAS_ORIGEN_POR_BANCO[selectedBank] || [] : []
+
   // Manejar selección de banco
   const handleBankChange = (bank: string) => {
     setSelectedBank(bank)
     setSelectedFileType("")
     setShowTransferForm(false)
-    setTransferData((prev) => ({ ...prev, banco: bank, tipoTransferencia: "" }))
+    setTransferData((prev) => ({
+      ...prev,
+      banco: bank,
+      tipoTransferencia: "",
+      cuentaOrigen: "",
+      cbuDestino: "",
+    }))
 
     // Auto-seleccionar E-check si el banco solo soporta E-checks
     const config = BANK_CONFIGS[bank]
@@ -279,12 +301,6 @@ export default function BankFileProcessor() {
     })
   }
 
-  // Obtener cuentas origen disponibles según el tipo de transferencia
-  const availableOriginAccounts =
-    transferData.tipoTransferencia === "mismo-titular" && selectedBank === "banco-valores"
-      ? CUENTAS_ORIGEN_MISMO_TITULAR
-      : CUENTAS_ORIGEN
-
   return (
     <div className="space-y-6">
       <div>
@@ -379,7 +395,9 @@ export default function BankFileProcessor() {
                 <Label>Tipo de Transferencia</Label>
                 <Select
                   value={transferData.tipoTransferencia}
-                  onValueChange={(value) => setTransferData((prev) => ({ ...prev, tipoTransferencia: value }))}
+                  onValueChange={(value) =>
+                    setTransferData((prev) => ({ ...prev, tipoTransferencia: value, cbuDestino: "" }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar tipo" />
@@ -389,7 +407,6 @@ export default function BankFileProcessor() {
                     <SelectItem value="mismo-banco">Mismo Banco</SelectItem>
                     {selectedBank === "banco-valores" && (
                       <>
-                        <SelectItem value="mismo-titular">Mismo Titular</SelectItem>
                         <SelectItem value="MEP-DL0">MEP - DL0</SelectItem>
                         <SelectItem value="MEP-GC1">MEP - GC1</SelectItem>
                         <SelectItem value="MEP-D20">MEP - D20</SelectItem>
@@ -399,6 +416,7 @@ export default function BankFileProcessor() {
                       <>
                         <SelectItem value="MEP-DL0">MEP - DL0</SelectItem>
                         <SelectItem value="MEP-GC1">MEP - GC1</SelectItem>
+                        <SelectItem value="MEP-D20">MEP - D20</SelectItem>
                       </>
                     )}
                   </SelectContent>
@@ -407,32 +425,30 @@ export default function BankFileProcessor() {
             </div>
 
             <div>
-              <Label>CBU Destino</Label>
+              <Label>CBU/Cuenta Destino</Label>
               <div className="space-y-2">
-                <Input
-                  value={transferData.cbuDestino}
-                  onChange={(e) => setTransferData((prev) => ({ ...prev, cbuDestino: e.target.value }))}
-                  placeholder="Ingrese CBU destino manualmente"
-                />
-                {availableCBUs.length > 0 && (
-                  <div>
-                    <Label className="text-sm text-gray-500">Seleccionar cuenta destino:</Label>
-                    <Select
-                      value=""
-                      onValueChange={(value) => setTransferData((prev) => ({ ...prev, cbuDestino: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar cuenta destino" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableCBUs.map((cuenta) => (
-                          <SelectItem key={cuenta.value} value={cuenta.value}>
-                            {cuenta.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {availableCBUs.length > 0 ? (
+                  <Select
+                    value={transferData.cbuDestino}
+                    onValueChange={(value) => setTransferData((prev) => ({ ...prev, cbuDestino: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar cuenta destino" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableCBUs.map((cuenta) => (
+                        <SelectItem key={cuenta.value} value={cuenta.value}>
+                          {cuenta.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={transferData.cbuDestino}
+                    onChange={(e) => setTransferData((prev) => ({ ...prev, cbuDestino: e.target.value }))}
+                    placeholder="Ingrese CBU destino manualmente"
+                  />
                 )}
               </div>
             </div>
@@ -441,24 +457,24 @@ export default function BankFileProcessor() {
               <div>
                 <Label>Importe Total a Transferir</Label>
                 <Input
-                  type="number"
-                  value={transferData.importeTotal || ""}
-                  onChange={(e) =>
-                    setTransferData((prev) => ({ ...prev, importeTotal: Number.parseFloat(e.target.value) || 0 }))
-                  }
-                  placeholder="0.00"
+                  value={transferData.importeTotal > 0 ? formatNumber(transferData.importeTotal) : ""}
+                  onChange={(e) => {
+                    const value = parseNumber(e.target.value)
+                    setTransferData((prev) => ({ ...prev, importeTotal: value }))
+                  }}
+                  placeholder="0,00"
                 />
               </div>
 
               <div>
                 <Label>Monto Máximo por Transferencia</Label>
                 <Input
-                  type="number"
-                  value={transferData.montoMaximo || ""}
-                  onChange={(e) =>
-                    setTransferData((prev) => ({ ...prev, montoMaximo: Number.parseFloat(e.target.value) || 0 }))
-                  }
-                  placeholder="0.00"
+                  value={transferData.montoMaximo > 0 ? formatNumber(transferData.montoMaximo) : ""}
+                  onChange={(e) => {
+                    const value = parseNumber(e.target.value)
+                    setTransferData((prev) => ({ ...prev, montoMaximo: value }))
+                  }}
+                  placeholder="700.000.000,00"
                 />
               </div>
             </div>
@@ -474,8 +490,8 @@ export default function BankFileProcessor() {
                   transferencias
                 </p>
                 <p className="text-blue-600 text-sm">
-                  Última transferencia: $
-                  {(transferData.importeTotal % transferData.montoMaximo || transferData.montoMaximo).toFixed(2)}
+                  Última transferencia:{" "}
+                  {formatNumber(transferData.importeTotal % transferData.montoMaximo || transferData.montoMaximo)}
                 </p>
               </div>
             )}
@@ -521,12 +537,12 @@ export default function BankFileProcessor() {
                       <div>
                         <Label>Importe</Label>
                         <Input
-                          type="number"
-                          value={newEcheck.importe || ""}
-                          onChange={(e) =>
-                            setNewEcheck((prev) => ({ ...prev, importe: Number.parseFloat(e.target.value) || 0 }))
-                          }
-                          placeholder="0.00"
+                          value={newEcheck.importe > 0 ? formatNumber(newEcheck.importe) : ""}
+                          onChange={(e) => {
+                            const value = parseNumber(e.target.value)
+                            setNewEcheck((prev) => ({ ...prev, importe: value }))
+                          }}
+                          placeholder="0,00"
                         />
                       </div>
                       <div>
@@ -628,7 +644,7 @@ export default function BankFileProcessor() {
                       {echeckEntries.map((entry) => (
                         <TableRow key={entry.id}>
                           <TableCell>{entry.cuitBeneficiario}</TableCell>
-                          <TableCell>${entry.importe.toFixed(2)}</TableCell>
+                          <TableCell>{formatNumber(entry.importe)}</TableCell>
                           <TableCell>{entry.referencia}</TableCell>
                           <TableCell>{entry.fechaPago}</TableCell>
                           <TableCell>{entry.email || "-"}</TableCell>
@@ -652,7 +668,7 @@ export default function BankFileProcessor() {
                   <div className="flex items-center gap-4">
                     <Badge variant="secondary">{echeckEntries.length} e-checks</Badge>
                     <Badge variant="outline">
-                      Total: ${echeckEntries.reduce((sum, entry) => sum + entry.importe, 0).toFixed(2)}
+                      Total: {formatNumber(echeckEntries.reduce((sum, entry) => sum + entry.importe, 0))}
                     </Badge>
                   </div>
                   <div className="flex gap-2">
