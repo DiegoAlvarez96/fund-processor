@@ -105,7 +105,32 @@ export function generateValoresD20File(transfers: Array<any>): string {
   return lines.join("")
 }
 
-// Generar archivo de transferencias para Banco de Valores
+// Generar archivo DL0 para Banco de Valores
+export function generateValoresDL0File(transfers: Array<any>): string {
+  const lines = transfers.map((transfer) => {
+    const codigoBanco = transfer.cbuDestino.substring(0, 4) // ✅ Primeros 4 dígitos del CBU destino
+
+    return (
+      [
+        "DL0", // Tipo fijo
+        transfer.cuentaOrigen, // Cuenta origen
+        transfer.cbuDestino, // CBU destino completo
+        codigoBanco, // Código banco (primeros 4 dígitos)
+        "30711610126", // CUIT fijo
+        "ADCAPSECURITIES ARG", // Nombre ordenante fijo
+        transfer.importe.toFixed(2), // Importe
+        "VAR", // Campo fijo
+        "S", // Campo fijo
+        "S", // Campo fijo
+        "FONDEO", // Concepto fijo
+      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+    )
+  })
+
+  return lines.join("")
+}
+
+// Generar archivo de transferencias para Banco de Valores (GC1 y otros)
 export function generateValoresTransferFile(transfers: Array<any>, tipoTransferencia: string): string {
   const lines = transfers.map((transfer) => {
     const tipo = tipoTransferencia.replace("MEP-", "")
@@ -113,7 +138,7 @@ export function generateValoresTransferFile(transfers: Array<any>, tipoTransfere
 
     return (
       [
-        tipo, // GC1, DL0, D20
+        tipo, // GC1, etc.
         transfer.cuentaOrigen, // Cuenta origen
         transfer.cbuDestino, // CBU destino
         codigoBanco, // ✅ Código banco extraído del CBU destino
@@ -261,6 +286,9 @@ export function generateBankFile(
         } else if (data.tipoTransferencia === "MEP-D20") {
           content = generateValoresD20File(transfers)
           filename = `MEP_D20_VALORES_${timestamp}.txt`
+        } else if (data.tipoTransferencia === "MEP-DL0") {
+          content = generateValoresDL0File(transfers)
+          filename = `MEP_DL0_VALORES_${timestamp}.txt`
         } else {
           content = generateValoresTransferFile(transfers, data.tipoTransferencia)
           filename = `MEP_${data.tipoTransferencia.replace("MEP-", "")}_VALORES_${timestamp}.txt`
