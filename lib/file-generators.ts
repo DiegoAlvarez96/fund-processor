@@ -52,16 +52,27 @@ export function fractionateTransfers(data: TransferData): Array<{
   return transfers
 }
 
-// Generar archivo de mismo titular para Banco de Valores
-export function generateValoresMismoTitularFile(transfers: Array<any>): string {
+// Generar archivo de mismo banco para Banco de Valores
+export function generateValoresMismoBancoFile(transfers: Array<any>): string {
   const lines = transfers.map((transfer) => {
-    return [
-      transfer.cuentaOrigen, // Cuenta origen
-      transfer.cbuDestino, // Cuenta destino
-      transfer.importe.toFixed(2), // Importe
-      "CPD", // Concepto fijo
-      "ADCAP SECURITIES 545", // Observaciones fijas
-    ].join(";")
+    // Determinar observaciones según cuenta destino
+    let observaciones = "ADCAP SECURITIES 545" // Default
+
+    // Si es ROFEX
+    if (transfer.cbuDestino === "300100000144362") {
+      observaciones = "ADCAP SECURITIES 323"
+    }
+    // Si es MAV ($ o USD) mantiene el default "ADCAP SECURITIES 545"
+
+    return (
+      [
+        transfer.cuentaOrigen, // Cuenta origen
+        transfer.cbuDestino, // Cuenta destino
+        transfer.importe.toFixed(2), // Importe
+        "CPD", // Concepto fijo
+        observaciones, // Observaciones según destino
+      ].join(";") + ";"
+    ) // ✅ Añadir ; al final
   })
 
   return lines.join("\n")
@@ -70,23 +81,25 @@ export function generateValoresMismoTitularFile(transfers: Array<any>): string {
 // Generar archivo D20 para Banco de Valores
 export function generateValoresD20File(transfers: Array<any>): string {
   const lines = transfers.map((transfer) => {
-    return [
-      "D20", // Tipo fijo
-      transfer.cuentaOrigen, // Cuenta origen
-      "", // Campo vacío
-      transfer.cbuDestino, // Cuenta destino (2250)
-      "30711610126", // CUIT fijo
-      "", // Campo vacío
-      transfer.importe.toFixed(2), // Importe
-      "1", // Campo fijo
-      "N", // Campo fijo
-      "S", // Campo fijo
-      "97", // Campo fijo
-      "", // Campo vacío
-      "1", // Campo fijo
-      "S0", // Campo fijo
-      transfer.importe.toFixed(2), // Importe repetido
-    ].join(";")
+    return (
+      [
+        "D20", // Tipo fijo
+        transfer.cuentaOrigen, // Cuenta origen
+        "", // Campo vacío
+        transfer.cbuDestino, // Cuenta destino (22500, 22204, etc.)
+        "30711610126", // CUIT fijo
+        "", // Campo vacío
+        transfer.importe.toFixed(2), // Importe
+        "1", // Campo fijo
+        "N", // Campo fijo
+        "S", // Campo fijo
+        "97", // Campo fijo
+        "", // Campo vacío
+        "1", // Campo fijo
+        "S0", // Campo fijo
+        transfer.cbuDestino, // ✅ Cuenta destino (no importe)
+      ].join(";") + ";"
+    ) // ✅ Añadir ; al final
   })
 
   return lines.join("\n")
@@ -98,21 +111,23 @@ export function generateValoresTransferFile(transfers: Array<any>, tipoTransfere
     const tipo = tipoTransferencia.replace("MEP-", "")
     const codigoBanco = transfer.cbuDestino.substring(0, 3) // ✅ Primeros 3 dígitos del CBU destino
 
-    return [
-      tipo, // GC1, DL0, D20
-      transfer.cuentaOrigen, // Cuenta prigen
-      transfer.cbuDestino, // CBU destino
-      codigoBanco, // ✅ Código banco extraído del CBU destino
-      "30604731018", // CUIT ordenante fijo
-      "BCSD ADCAP FCI", // Nombre ordenante fijo
-      transfer.importe.toFixed(2), // Importe
-      "", // Campo vacío
-      "N", // Campo N
-      "N", // Campo N
-      "TRANSFERENCIA AUTOMATICA", // Concepto
-      "01", // Campo fijo
-      "T;", // Campo fijo
-    ].join(";")
+    return (
+      [
+        tipo, // GC1, DL0, D20
+        transfer.cuentaOrigen, // Cuenta origen
+        transfer.cbuDestino, // CBU destino
+        codigoBanco, // ✅ Código banco extraído del CBU destino
+        "30604731018", // CUIT ordenante fijo
+        "BCSD ADCAP FCI", // Nombre ordenante fijo
+        transfer.importe.toFixed(2), // Importe
+        "", // Campo vacío
+        "N", // Campo N
+        "N", // Campo N
+        "TRANSFERENCIA AUTOMATICA", // Concepto
+        "01", // Campo fijo
+        "T", // Campo fijo (removido el ; extra)
+      ].join(";") + ";"
+    ) // ✅ Añadir ; al final
   })
 
   return lines.join("\n")
@@ -240,9 +255,9 @@ export function generateBankFile(
 
     switch (banco) {
       case "banco-valores":
-        if (data.tipoTransferencia === "mismo-titular") {
-          content = generateValoresMismoTitularFile(transfers)
-          filename = `MISMO_TITULAR_VALORES_${timestamp}.txt`
+        if (data.tipoTransferencia === "mismo-banco") {
+          content = generateValoresMismoBancoFile(transfers)
+          filename = `MISMO_BANCO_VALORES_${timestamp}.txt`
         } else if (data.tipoTransferencia === "MEP-D20") {
           content = generateValoresD20File(transfers)
           filename = `MEP_D20_VALORES_${timestamp}.txt`
