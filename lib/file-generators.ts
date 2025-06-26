@@ -56,13 +56,15 @@ export function fractionateTransfers(data: TransferData): Array<{
 export function generateValoresTransferFile(transfers: Array<any>, tipoTransferencia: string): string {
   const lines = transfers.map((transfer) => {
     const tipo = tipoTransferencia.replace("MEP-", "")
+    const codigoBanco = transfer.cbuDestino.substring(0, 4) // ✅ Primeros 4 dígitos del CBU destino
+
     return [
       tipo, // GC1, DL0, D20
-      transfer.numeroOperacion, // Número de operación único
+      transfer.cuentaOrigen, // Cuenta prigen
       transfer.cbuDestino, // CBU destino
-      "0299", // Código banco fijo
+      codigoBanco, // ✅ Código banco extraído del CBU destino
       "30604731018", // CUIT ordenante fijo
-      "BCSD ADCAP ASSET FCI", // Nombre ordenante fijo
+      "BCSD ADCAP FCI", // Nombre ordenante fijo
       transfer.importe.toFixed(2), // Importe
       "", // Campo vacío
       "N", // Campo N
