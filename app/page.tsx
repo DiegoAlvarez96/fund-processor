@@ -379,7 +379,7 @@ export default function MainApp() {
               <Lock className="w-6 h-6 text-blue-600" />
             </div>
             <CardTitle className="text-2xl font-bold text-gray-900">ADCAP OPERACIONES</CardTitle>
-            <p className="text-gray-600">Sistema de Gestión Financiera</p>
+            <p className="text-gray-600">Sistema de Gestión</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
