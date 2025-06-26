@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    serverComponentsExternalPackages: [],
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -9,6 +12,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  output: "standalone",
 }
 
 export default nextConfig
