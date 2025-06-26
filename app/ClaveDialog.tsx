@@ -26,7 +26,7 @@ export default function ClaveDialog({ open, onClose, onSuccess }: ClaveDialogPro
     } else {
       toast({
         title: "Clave incorrecta",
-        description: "La clave ingresada no es válida",
+        description: "La clave ingresada no es válida dialog",
         variant: "destructive",
       })
     }
