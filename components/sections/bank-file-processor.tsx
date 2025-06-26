@@ -368,29 +368,33 @@ export default function BankFileProcessor() {
 
             <div>
               <Label>CBU Destino</Label>
-              {availableCBUs.length > 0 ? (
-                <Select
-                  value={transferData.cbuDestino}
-                  onValueChange={(value) => setTransferData((prev) => ({ ...prev, cbuDestino: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar CBU destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableCBUs.map((cbu) => (
-                      <SelectItem key={cbu} value={cbu}>
-                        {cbu}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
+              <div className="space-y-2">
                 <Input
                   value={transferData.cbuDestino}
                   onChange={(e) => setTransferData((prev) => ({ ...prev, cbuDestino: e.target.value }))}
-                  placeholder="Ingrese CBU destino"
+                  placeholder="Ingrese CBU destino manualmente"
                 />
-              )}
+                {availableCBUs.length > 0 && (
+                  <div>
+                    <Label className="text-sm text-gray-500">O seleccionar CBU precargado:</Label>
+                    <Select
+                      value=""
+                      onValueChange={(value) => setTransferData((prev) => ({ ...prev, cbuDestino: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar CBU precargado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableCBUs.map((cbu) => (
+                          <SelectItem key={cbu} value={cbu}>
+                            {cbu}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -542,7 +546,7 @@ export default function BankFileProcessor() {
                         <Textarea
                           value={bulkEcheckText}
                           onChange={(e) => setBulkEcheckText(e.target.value)}
-                          placeholder="30123456789;150000.00;DESCRIPCION DEL COMITENTE;2025-01-30;email@ejemplo.com"
+                          placeholder="30123456789;150000.00;PAGO SERVICIOS;2025-01-30;email@ejemplo.com"
                           rows={10}
                         />
                       </div>
