@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Upload, Plus, Send, RotateCcw, Trash2, X, FileText, Lock, Eye, EyeOff } from "lucide-react"
+import { Upload, Plus, Send, RotateCcw, Trash2, X, FileText, Lock, Eye, EyeOff, Clock } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
 
 interface Transaction {
@@ -48,12 +48,22 @@ const FCI_DICT: Record<string, string> = {
 
 const USERS = ["adcap", "adcap_99", "adcap_1000"]
 
+// Configuración de timeout (en minutos)
+const SESSION_TIMEOUT_MINUTES = 30
+const WARNING_MINUTES = 5 // Avisar 5 minutos antes
+
 export default function FundProcessor() {
   // Estado para autenticación
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [secretKey, setSecretKey] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [authError, setAuthError] = useState("")
+  
+  // Estados para timeout de sesión
+  const [sessionTimeLeft, setSessionTimeLeft] = useState(SESSION_TIMEOUT_MINUTES * 60)
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false)
+  const sessionTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const warningTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Estados existentes
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -80,13 +90,120 @@ export default function FundProcessor() {
     requestId: "",
   })
 
-  // Verificar autenticación al cargar
+  // Función para cerrar sesión por timeout
+  const handleSessionTimeout = useCallback(() => {
+    setIsAuthenticated(false)
+    setSecretKey("")
+    setTransactions([])
+    setShowTimeoutWarning(false)
+    localStorage.removeItem("fund-processor-auth")
+    localStorage.removeItem("fund-processor-session-start")
+    
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current)
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current)
+    
+    toast({
+      title: "Sesión expirada",
+      description: "Tu sesión ha expirado por inactividad. Por favor, inicia sesión nuevamente.",
+      variant: "destructive",
+    })
+  }, [toast])
+
+  // Función para extender sesión
+  const extendSession = useCallback(() => {
+    setSessionTimeLeft(SESSION_TIMEOUT_MINUTES * 60)
+    setShowTimeoutWarning(false)
+    localStorage.setItem("fund-processor-session-start", Date.now().toString())
+    
+    // Limpiar timers existentes
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current)
+    
+    // Configurar nuevo timer de advertencia
+    warningTimerRef.current = setTimeout(() => {
+      setShowTimeoutWarning(true)
+    }, (SESSION_TIMEOUT_MINUTES - WARNING_MINUTES) * 60 * 1000)
+    
+    toast({
+      title: "Sesión extendida",
+      description: `Tu sesión se ha extendido por ${SESSION_TIMEOUT_MINUTES} minutos más`,
+    })
+  }, [toast])
+
+  // Función para resetear actividad del usuario
+  const resetUserActivity = useCallback(() => {
+    if (isAuthenticated) {
+      extendSession()
+    }
+  }, [isAuthenticated, extendSession])
+
+  // Verificar autenticación y configurar timers al cargar
   useEffect(() => {
     const savedAuth = localStorage.getItem("fund-processor-auth")
-    if (savedAuth === "authenticated") {
-      setIsAuthenticated(true)
+    const sessionStart = localStorage.getItem("fund-processor-session-start")
+    
+    if (savedAuth === "authenticated" && sessionStart) {
+      const elapsed = (Date.now() - parseInt(sessionStart)) / 1000 / 60 // minutos
+      
+      if (elapsed < SESSION_TIMEOUT_MINUTES) {
+        setIsAuthenticated(true)
+        const remainingTime = (SESSION_TIMEOUT_MINUTES - elapsed) * 60
+        setSessionTimeLeft(Math.floor(remainingTime))
+        
+        // Configurar timer de advertencia si queda más tiempo que el warning
+        if (remainingTime > WARNING_MINUTES * 60) {
+          warningTimerRef.current = setTimeout(() => {
+            setShowTimeoutWarning(true)
+          }, (remainingTime - WARNING_MINUTES * 60) * 1000)
+        } else {
+          setShowTimeoutWarning(true)
+        }
+      } else {
+        // Sesión expirada
+        handleSessionTimeout()
+      }
     }
-  }, [])
+  }, [handleSessionTimeout])
+
+  // Timer de cuenta regresiva
+  useEffect(() => {
+    if (isAuthenticated) {
+      sessionTimerRef.current = setInterval(() => {
+        setSessionTimeLeft((prev) => {
+          if (prev <= 1) {
+            handleSessionTimeout()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return () => {
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current)
+    }
+  }, [isAuthenticated, handleSessionTimeout])
+
+  // Detectar actividad del usuario
+  useEffect(() => {
+    if (isAuthenticated) {
+      const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
+      
+      const handleActivity = () => {
+        resetUserActivity()
+      }
+
+      // Agregar listeners de actividad
+      events.forEach(event => {
+        document.addEventListener(event, handleActivity, true)
+      })
+
+      return () => {
+        events.forEach(event => {
+          document.removeEventListener(event, handleActivity, true)
+        })
+      }
+    }
+  }, [isAuthenticated, resetUserActivity])
 
   // Función para validar clave secreta
   const handleAuthentication = async () => {
@@ -107,10 +224,18 @@ export default function FundProcessor() {
       if (result.success) {
         setIsAuthenticated(true)
         setAuthError("")
+        setSessionTimeLeft(SESSION_TIMEOUT_MINUTES * 60)
         localStorage.setItem("fund-processor-auth", "authenticated")
+        localStorage.setItem("fund-processor-session-start", Date.now().toString())
+        
+        // Configurar timer de advertencia
+        warningTimerRef.current = setTimeout(() => {
+          setShowTimeoutWarning(true)
+        }, (SESSION_TIMEOUT_MINUTES - WARNING_MINUTES) * 60 * 1000)
+        
         toast({
           title: "Acceso autorizado",
-          description: "Bienvenido al procesador de fondos",
+          description: `Bienvenido al procesador de fondos. Sesión válida por ${SESSION_TIMEOUT_MINUTES} minutos.`,
         })
       } else {
         setAuthError("Clave secreta incorrecta")
@@ -126,11 +251,24 @@ export default function FundProcessor() {
     setIsAuthenticated(false)
     setSecretKey("")
     setTransactions([])
+    setShowTimeoutWarning(false)
     localStorage.removeItem("fund-processor-auth")
+    localStorage.removeItem("fund-processor-session-start")
+    
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current)
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current)
+    
     toast({
       title: "Sesión cerrada",
       description: "Has cerrado sesión correctamente",
     })
+  }
+
+  // Formatear tiempo restante
+  const formatTimeLeft = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   // Pantalla de autenticación
@@ -184,8 +322,9 @@ export default function FundProcessor() {
             </Button>
 
             <div className="text-center text-sm text-gray-500">
-              <p>Sistema de ADCAP Operaciones</p>
+              <p>Sistema de procesamiento de fondos de inversión</p>
               <p className="text-xs mt-1">Acceso autorizado únicamente</p>
+              <p className="text-xs mt-1 text-blue-600">Sesión válida por {SESSION_TIMEOUT_MINUTES} minutos</p>
             </div>
           </CardContent>
         </Card>
@@ -399,19 +538,54 @@ export default function FundProcessor() {
 
   // Interfaz principal (autenticado)
   return (
-    <CardHeader>
-      <div className="flex justify-between items-center">
-        <CardTitle className="text-2xl font-bold text-center flex-1">Procesador de Fondos de Inversión</CardTitle>
-        <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:text-red-800">
-          <X className="w-4 h-4 mr-2" />
-          Cerrar Sesión
-        </Button>
-      </div>
-    </CardHeader>
     <div className="container mx-auto p-6 space-y-6">
+      {/* Advertencia de timeout */}
+      {showTimeoutWarning && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Clock className="w-5 h-5 text-orange-600" />
+                <div>
+                  <p className="text-sm font-medium text-orange-800">
+                    Tu sesión expirará en {formatTimeLeft(sessionTimeLeft)}
+                  </p>
+                  <p className="text-xs text-orange-600">
+                    Haz clic en "Extender Sesión" para continuar trabajando
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={extendSession} className="bg-orange-600 hover:bg-orange-700">
+                  Extender Sesión
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleLogout}>
+                  Cerrar Sesión
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-2xl font-bold text-center flex-1">Procesador de Fondos de Inversión</CardTitle>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-500 flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                {formatTimeLeft(sessionTimeLeft)}
+              </div>
+              <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:text-red-800">
+                <X className="w-4 h-4 mr-2" />
+                Cerrar Sesión
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
         <CardContent>
-          {/* Botones superiores */}
+          {/* Resto del contenido igual que antes... */}
           <div className="flex flex-wrap gap-3 mb-6">
             <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
               <DialogTrigger asChild>
