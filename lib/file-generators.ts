@@ -52,6 +52,46 @@ export function fractionateTransfers(data: TransferData): Array<{
   return transfers
 }
 
+// Generar archivo de mismo titular para Banco de Valores
+export function generateValoresMismoTitularFile(transfers: Array<any>): string {
+  const lines = transfers.map((transfer) => {
+    return [
+      transfer.cuentaOrigen, // Cuenta origen
+      transfer.cbuDestino, // Cuenta destino
+      transfer.importe.toFixed(2), // Importe
+      "CPD", // Concepto fijo
+      "ADCAP SECURITIES 545", // Observaciones fijas
+    ].join(";")
+  })
+
+  return lines.join("\n")
+}
+
+// Generar archivo D20 para Banco de Valores
+export function generateValoresD20File(transfers: Array<any>): string {
+  const lines = transfers.map((transfer) => {
+    return [
+      "D20", // Tipo fijo
+      transfer.cuentaOrigen, // Cuenta origen
+      "", // Campo vacío
+      transfer.cbuDestino, // Cuenta destino (2250)
+      "30711610126", // CUIT fijo
+      "", // Campo vacío
+      transfer.importe.toFixed(2), // Importe
+      "1", // Campo fijo
+      "N", // Campo fijo
+      "S", // Campo fijo
+      "97", // Campo fijo
+      "", // Campo vacío
+      "1", // Campo fijo
+      "S0", // Campo fijo
+      transfer.importe.toFixed(2), // Importe repetido
+    ].join(";")
+  })
+
+  return lines.join("\n")
+}
+
 // Generar archivo de transferencias para Banco de Valores
 export function generateValoresTransferFile(transfers: Array<any>, tipoTransferencia: string): string {
   const lines = transfers.map((transfer) => {
@@ -71,7 +111,7 @@ export function generateValoresTransferFile(transfers: Array<any>, tipoTransfere
       "N", // Campo N
       "TRANSFERENCIA AUTOMATICA", // Concepto
       "01", // Campo fijo
-      "T", // Campo fijo
+      "T;", // Campo fijo
     ].join(";")
   })
 
@@ -88,7 +128,7 @@ export function generateComafiTransferFile(transfers: Array<any>): string {
       transfer.importe.toFixed(2),
       "TRANSFERENCIA AUTOMATICA",
       `OP-${transfer.numeroOperacion}`,
-    ].join(","),
+    ].join(";"),
   )
 
   return [header, ...lines].join("\n")
@@ -200,8 +240,16 @@ export function generateBankFile(
 
     switch (banco) {
       case "banco-valores":
-        content = generateValoresTransferFile(transfers, data.tipoTransferencia)
-        filename = `MEP_${data.tipoTransferencia.replace("MEP-", "")}_VALORES_${timestamp}.txt`
+        if (data.tipoTransferencia === "mismo-titular") {
+          content = generateValoresMismoTitularFile(transfers)
+          filename = `MISMO_TITULAR_VALORES_${timestamp}.txt`
+        } else if (data.tipoTransferencia === "MEP-D20") {
+          content = generateValoresD20File(transfers)
+          filename = `MEP_D20_VALORES_${timestamp}.txt`
+        } else {
+          content = generateValoresTransferFile(transfers, data.tipoTransferencia)
+          filename = `MEP_${data.tipoTransferencia.replace("MEP-", "")}_VALORES_${timestamp}.txt`
+        }
         break
       case "banco-comafi":
         content = generateComafiTransferFile(transfers)
