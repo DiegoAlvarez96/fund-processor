@@ -691,7 +691,7 @@ export default function FundProcessor() {
                   if (passwordPrompt !== claveCorrecta) {
                     toast({
                       title: "Clave incorrecta",
-                      description: "La clave ingresada no es válida",
+                      description: "La clave ingresada no es válida foundproccesr",
                       variant: "destructive",
                     })
                     return
