@@ -71,11 +71,11 @@ export function generateValoresMismoBancoFile(transfers: Array<any>): string {
         transfer.importe.toFixed(2), // Importe
         "CPD", // Concepto fijo
         observaciones, // Observaciones según destino
-      ].join(";") + ";"
-    ) // ✅ Añadir ; al final
+      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+    )
   })
 
-  return lines.join("\n")
+  return lines.join("")
 }
 
 // Generar archivo D20 para Banco de Valores
@@ -98,11 +98,11 @@ export function generateValoresD20File(transfers: Array<any>): string {
         "1", // Campo fijo
         "S0", // Campo fijo
         transfer.cbuDestino, // ✅ Cuenta destino (no importe)
-      ].join(";") + ";"
-    ) // ✅ Añadir ; al final
+      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+    )
   })
 
-  return lines.join("\n")
+  return lines.join("")
 }
 
 // Generar archivo de transferencias para Banco de Valores
@@ -126,11 +126,11 @@ export function generateValoresTransferFile(transfers: Array<any>, tipoTransfere
         "TRANSFERENCIA AUTOMATICA", // Concepto
         "01", // Campo fijo
         "T", // Campo fijo (removido el ; extra)
-      ].join(";") + ";"
-    ) // ✅ Añadir ; al final
+      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+    )
   })
 
-  return lines.join("\n")
+  return lines.join("")
 }
 
 // Generar archivo de transferencias para Comafi
