@@ -3,6 +3,7 @@ export interface BankConfig {
   name: string
   fileExtension: "txt" | "csv"
   supportsEcheck: boolean
+  supportsTransfer: boolean
   transferFormats: {
     [key: string]: {
       fields: string[]
@@ -22,6 +23,7 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
     name: "Banco de Valores",
     fileExtension: "txt",
     supportsEcheck: false,
+    supportsTransfer: true,
     transferFormats: {
       "MEP-GC1": {
         fields: [
@@ -86,6 +88,7 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
     name: "Banco Comafi",
     fileExtension: "csv",
     supportsEcheck: true,
+    supportsTransfer: true,
     transferFormats: {
       "MEP-DL0": {
         fields: ["cbuOrigen", "cbuDestino", "importe", "concepto", "referencia"],
@@ -113,13 +116,8 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
     name: "Banco de Comercio",
     fileExtension: "txt",
     supportsEcheck: true,
-    transferFormats: {
-      inmediata: {
-        fields: ["cbuOrigen", "cbuDestino", "importe", "concepto"],
-        separator: ";",
-        dateFormat: "DD-MM-YYYY",
-      },
-    },
+    supportsTransfer: false, // Solo E-checks
+    transferFormats: {},
     echeckFormat: {
       fields: ["cbu", "tipoCheque", "caracter", "cuitBeneficiario", "importe", "referencia", "fechaPago", "email"],
       separator: ";",
@@ -130,13 +128,8 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
     name: "Banco BIND",
     fileExtension: "csv",
     supportsEcheck: true,
-    transferFormats: {
-      inmediata: {
-        fields: ["cbuOrigen", "cbuDestino", "importe", "concepto"],
-        separator: ",",
-        dateFormat: "DD/MM/YYYY",
-      },
-    },
+    supportsTransfer: false, // Solo E-checks
+    transferFormats: {},
     echeckFormat: {
       fields: [
         "cuitBeneficiario",
@@ -162,10 +155,10 @@ export const CBU_PRESETS: Record<string, Record<string, string[]>> = {
     "banco-comafi": ["0650001010000012345678", "0650001010000087654321"],
   },
   "MEP-GC1": {
-    "banco-valores": ["2990000000002293790008", "AÑADIR"],
+    "banco-valores": ["2990000000002293790008", "2990000000015072580211"],
   },
   "MEP-D20": {
-    "banco-valores": ["22500"],
+    "banco-valores": ["2990000000002250000000"],
   },
 }
 
