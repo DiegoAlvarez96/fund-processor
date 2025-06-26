@@ -686,7 +686,7 @@ export default function FundProcessor() {
                     ? transactions[0]?.cuotapartista
                     : deleteForm.user
 
-                  const claveCorrecta = process.env.NEXT_PUBLIC_PROCESADOR_SECRET
+                  const claveCorrecta = process.env.NEXT_PUBLIC_PROCESADOR_SECRET ?? ""
 
                   if (passwordPrompt !== claveCorrecta) {
                     toast({
