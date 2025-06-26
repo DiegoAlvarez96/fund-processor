@@ -58,12 +58,12 @@ export function generateValoresTransferFile(transfers: Array<any>, tipoTransfere
     const tipo = tipoTransferencia.replace("MEP-", "")
     return [
       tipo, // GC1, DL0, D20
-      transfer.numeroOperacion,
-      transfer.cbuDestino,
+      transfer.numeroOperacion, // Número de operación único
+      transfer.cbuDestino, // CBU destino
       "0299", // Código banco fijo
       "30604731018", // CUIT ordenante fijo
       "BCSD ADCAP ASSET FCI", // Nombre ordenante fijo
-      transfer.importe.toFixed(2),
+      transfer.importe.toFixed(2), // Importe
       "", // Campo vacío
       "N", // Campo N
       "N", // Campo N
@@ -81,7 +81,7 @@ export function generateComafiTransferFile(transfers: Array<any>): string {
   const header = "CBU_ORIGEN,CBU_DESTINO,IMPORTE,CONCEPTO,REFERENCIA"
   const lines = transfers.map((transfer) =>
     [
-      transfer.cuentaOrigen, // Usa la cuenta origen original
+      transfer.cuentaOrigen, // ✅ CUENTA ORIGEN SELECCIONADA
       transfer.cbuDestino,
       transfer.importe.toFixed(2),
       "TRANSFERENCIA AUTOMATICA",
@@ -96,7 +96,7 @@ export function generateComafiTransferFile(transfers: Array<any>): string {
 export function generateComercioTransferFile(transfers: Array<any>): string {
   const lines = transfers.map((transfer) =>
     [
-      transfer.cuentaOrigen, // Usa la cuenta origen original
+      transfer.cuentaOrigen, // ✅ CUENTA ORIGEN SELECCIONADA
       transfer.cbuDestino,
       transfer.importe.toFixed(2),
       "TRANSFERENCIA AUTOMATICA",
@@ -111,7 +111,7 @@ export function generateBindTransferFile(transfers: Array<any>): string {
   const header = "CBU_ORIGEN,CBU_DESTINO,IMPORTE,CONCEPTO"
   const lines = transfers.map((transfer) =>
     [
-      transfer.cuentaOrigen, // Usa la cuenta origen original
+      transfer.cuentaOrigen, // ✅ CUENTA ORIGEN SELECCIONADA
       transfer.cbuDestino,
       transfer.importe.toFixed(2),
       "TRANSFERENCIA AUTOMATICA",
@@ -147,7 +147,7 @@ export function generateComercioEcheckFile(echecks: EcheckData[]): string {
   const header = "CBU;TIPODECHEQUE;CARACTER;CUITBENEFICIARIO;IMPORTE;REFERENCIA;FECHAPAGO;EMAIL"
   const lines = echecks.map((echeck) =>
     [
-      "4320001010003415620011", // CBU fijo
+      "4320001010003415620011", // CBU fijo para e-checks
       "CC",
       "A la orden",
       echeck.cuitBeneficiario,
