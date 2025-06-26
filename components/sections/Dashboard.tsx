@@ -18,7 +18,7 @@ export default function Dashboard() {
           Bienvenido a <span className="text-blue-600">ADCAP OPERACIONES</span>
         </h1>
         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-          Sistema integral de gestión financiera para el procesamiento de fondos de inversión y archivos bancarios
+          Sistema integral de gestión
         </p>
       </div>
 
@@ -34,13 +34,12 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="text-center space-y-4">
             <p className="text-gray-600 text-lg">
-              Procesa suscripciones y rescates de fondos de inversión de manera eficiente
+              Procesa suscripciones y rescates de fondoS
             </p>
             <ul className="text-sm text-gray-500 space-y-2">
+              <li>• Operativo para cc 1000, 10119, 9910119</li>
               <li>• Carga masiva de transacciones</li>
-              <li>• Procesamiento automático</li>
-              <li>• Gestión de errores y reintentos</li>
-              <li>• Eliminación de solicitudes</li>
+              <li>• Eliminación de solicitudes en VF</li>
             </ul>
             <Button
               className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6"
@@ -63,10 +62,12 @@ export default function Dashboard() {
           <CardContent className="text-center space-y-4">
             <p className="text-gray-600 text-lg">Procesa y gestiona archivos de diferentes entidades bancarias</p>
             <ul className="text-sm text-gray-500 space-y-2">
-              <li>• Soporte múltiples bancos</li>
-              <li>• Diferentes tipos de archivo</li>
-              <li>• Procesamiento automático</li>
-              <li>• Reportes y estadísticas</li>
+              <li>• Generador de archivos masivos para transferencias</li>
+              <li>• GENERACION TRF MULTIPLE PARA FIRMA INFERIORES</li>
+              <li>• BCO VALORES</li>
+              <li>• BCO COMAFI</li>
+              <li>• GENERACION DE TXT PARA ECHEQS MULTIBANCO</li>
+            </ul>
             </ul>
             <Button
               className="w-full bg-green-600 hover:bg-green-700 text-lg py-6"
@@ -83,10 +84,9 @@ export default function Dashboard() {
       <div className="text-center py-8">
         <Card className="max-w-2xl mx-auto bg-gray-50">
           <CardContent className="pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sistema Seguro y Confiable</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sistema de gestion</h3>
             <p className="text-gray-600">
-              Todas las operaciones están protegidas con autenticación segura y timeout de sesión automático. El sistema
-              mantiene un registro completo de todas las actividades realizadas.
+              sistema en periodo de testing
             </p>
           </CardContent>
         </Card>
