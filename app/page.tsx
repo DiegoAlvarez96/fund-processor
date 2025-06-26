@@ -399,17 +399,17 @@ export default function FundProcessor() {
 
   // Interfaz principal (autenticado)
   return (
+    <CardHeader>
+      <div className="flex justify-between items-center">
+        <CardTitle className="text-2xl font-bold text-center flex-1">Procesador de Fondos de Inversión</CardTitle>
+        <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:text-red-800">
+          <X className="w-4 h-4 mr-2" />
+          Cerrar Sesión
+        </Button>
+      </div>
+    </CardHeader>
     <div className="container mx-auto p-6 space-y-6">
       <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-2xl font-bold text-center flex-1">Procesador de Fondos de Inversión</CardTitle>
-            <Button variant="outline" onClick={handleLogout} className="text-red-600 hover:text-red-800">
-              <X className="w-4 h-4 mr-2" />
-              Cerrar Sesión
-            </Button>
-          </div>
-        </CardHeader>
         <CardContent>
           {/* Botones superiores */}
           <div className="flex flex-wrap gap-3 mb-6">
