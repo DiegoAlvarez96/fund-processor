@@ -64,17 +64,12 @@ export default function BankFileProcessor() {
 
   const { toast } = useToast()
 
-  // Función para formatear números con separadores de miles
+  // Función para formatear números con separadores de miles (solo para mostrar)
   const formatNumber = (value: number): string => {
     return value.toLocaleString("es-AR", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
-  }
-
-  // Función para parsear números desde el formato con separadores
-  const parseNumber = (value: string): number => {
-    return Number.parseFloat(value.replace(/\./g, "").replace(",", ".")) || 0
   }
 
   // Obtener configuración del banco seleccionado
@@ -457,24 +452,24 @@ export default function BankFileProcessor() {
               <div>
                 <Label>Importe Total a Transferir</Label>
                 <Input
-                  value={transferData.importeTotal > 0 ? formatNumber(transferData.importeTotal) : ""}
-                  onChange={(e) => {
-                    const value = parseNumber(e.target.value)
-                    setTransferData((prev) => ({ ...prev, importeTotal: value }))
-                  }}
-                  placeholder="0,00"
+                  type="number"
+                  value={transferData.importeTotal || ""}
+                  onChange={(e) =>
+                    setTransferData((prev) => ({ ...prev, importeTotal: Number.parseFloat(e.target.value) || 0 }))
+                  }
+                  placeholder="0.00"
                 />
               </div>
 
               <div>
                 <Label>Monto Máximo por Transferencia</Label>
                 <Input
-                  value={transferData.montoMaximo > 0 ? formatNumber(transferData.montoMaximo) : ""}
-                  onChange={(e) => {
-                    const value = parseNumber(e.target.value)
-                    setTransferData((prev) => ({ ...prev, montoMaximo: value }))
-                  }}
-                  placeholder="700.000.000,00"
+                  type="number"
+                  value={transferData.montoMaximo || ""}
+                  onChange={(e) =>
+                    setTransferData((prev) => ({ ...prev, montoMaximo: Number.parseFloat(e.target.value) || 0 }))
+                  }
+                  placeholder="700000000.00"
                 />
               </div>
             </div>
@@ -537,12 +532,12 @@ export default function BankFileProcessor() {
                       <div>
                         <Label>Importe</Label>
                         <Input
-                          value={newEcheck.importe > 0 ? formatNumber(newEcheck.importe) : ""}
-                          onChange={(e) => {
-                            const value = parseNumber(e.target.value)
-                            setNewEcheck((prev) => ({ ...prev, importe: value }))
-                          }}
-                          placeholder="0,00"
+                          type="number"
+                          value={newEcheck.importe || ""}
+                          onChange={(e) =>
+                            setNewEcheck((prev) => ({ ...prev, importe: Number.parseFloat(e.target.value) || 0 }))
+                          }
+                          placeholder="0.00"
                         />
                       </div>
                       <div>
