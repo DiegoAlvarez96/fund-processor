@@ -18,11 +18,14 @@ export interface EcheckData {
   banco: string
 }
 
-// Generar número de operación único
-let operationCounter = 300100000134934
+// Generar número de operación único (independiente de la cuenta origen)
+let operationCounter = 1
 
 function generateOperationNumber(): string {
-  return (++operationCounter).toString()
+  const timestamp = Date.now().toString().slice(-8) // Últimos 8 dígitos del timestamp
+  const counter = operationCounter.toString().padStart(4, "0") // Contador con 4 dígitos
+  operationCounter++
+  return `${timestamp}${counter}` // Combina timestamp + contador
 }
 
 // Fraccionar transferencias según monto máximo
@@ -38,10 +41,10 @@ export function fractionateTransfers(data: TransferData): Array<{
   while (remainingAmount > 0) {
     const transferAmount = Math.min(remainingAmount, data.montoMaximo)
     transfers.push({
-      cuentaOrigen: data.cuentaOrigen,
+      cuentaOrigen: data.cuentaOrigen, // Mantiene la cuenta origen original
       cbuDestino: data.cbuDestino,
       importe: transferAmount,
-      numeroOperacion: generateOperationNumber(),
+      numeroOperacion: generateOperationNumber(), // Número independiente
     })
     remainingAmount -= transferAmount
   }
@@ -78,7 +81,7 @@ export function generateComafiTransferFile(transfers: Array<any>): string {
   const header = "CBU_ORIGEN,CBU_DESTINO,IMPORTE,CONCEPTO,REFERENCIA"
   const lines = transfers.map((transfer) =>
     [
-      transfer.cuentaOrigen,
+      transfer.cuentaOrigen, // Usa la cuenta origen original
       transfer.cbuDestino,
       transfer.importe.toFixed(2),
       "TRANSFERENCIA AUTOMATICA",
@@ -92,7 +95,12 @@ export function generateComafiTransferFile(transfers: Array<any>): string {
 // Generar archivo de transferencias para Comercio
 export function generateComercioTransferFile(transfers: Array<any>): string {
   const lines = transfers.map((transfer) =>
-    [transfer.cuentaOrigen, transfer.cbuDestino, transfer.importe.toFixed(2), "TRANSFERENCIA AUTOMATICA"].join(";"),
+    [
+      transfer.cuentaOrigen, // Usa la cuenta origen original
+      transfer.cbuDestino,
+      transfer.importe.toFixed(2),
+      "TRANSFERENCIA AUTOMATICA",
+    ].join(";"),
   )
 
   return lines.join("\n")
@@ -102,7 +110,12 @@ export function generateComercioTransferFile(transfers: Array<any>): string {
 export function generateBindTransferFile(transfers: Array<any>): string {
   const header = "CBU_ORIGEN,CBU_DESTINO,IMPORTE,CONCEPTO"
   const lines = transfers.map((transfer) =>
-    [transfer.cuentaOrigen, transfer.cbuDestino, transfer.importe.toFixed(2), "TRANSFERENCIA AUTOMATICA"].join(","),
+    [
+      transfer.cuentaOrigen, // Usa la cuenta origen original
+      transfer.cbuDestino,
+      transfer.importe.toFixed(2),
+      "TRANSFERENCIA AUTOMATICA",
+    ].join(","),
   )
 
   return [header, ...lines].join("\n")
