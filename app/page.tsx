@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils"
 
 // Importar componentes de las diferentes secciones
 import FundProcessor from "@/components/sections/FundProcessor"
-import BankFiles from "@/components/sections/BankFiles"
+import BankFiles from "@/components/sections/bank-file-processor"
 import Dashboard from "@/components/sections/Dashboard"
 
 // Configuración de timeout (en minutos)
