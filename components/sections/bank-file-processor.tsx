@@ -10,7 +10,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Building2, Download, Plus, Trash2, Upload, Calculator, CreditCard, ArrowRight } from "lucide-react"
+import {
+  Building2,
+  Download,
+  Plus,
+  Trash2,
+  Upload,
+  Calculator,
+  CreditCard,
+  ArrowRight,
+  AlertCircle,
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN } from "@/lib/bank-config"
 import { generateBankFile, type TransferData, type EcheckData } from "@/lib/file-generators"
@@ -69,6 +79,12 @@ export default function BankFileProcessor() {
     setSelectedFileType("")
     setShowTransferForm(false)
     setTransferData((prev) => ({ ...prev, banco: bank, tipoTransferencia: "" }))
+
+    // Auto-seleccionar E-check si el banco solo soporta E-checks
+    const config = BANK_CONFIGS[bank]
+    if (config && !config.supportsTransfer && config.supportsEcheck) {
+      setSelectedFileType("echeck")
+    }
   }
 
   // Manejar selección de tipo de archivo
@@ -302,17 +318,29 @@ export default function BankFileProcessor() {
                   <SelectValue placeholder="Seleccionar tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="transferencia">Transferencia</SelectItem>
+                  {bankConfig?.supportsTransfer && <SelectItem value="transferencia">Transferencia</SelectItem>}
                   {bankConfig?.supportsEcheck && <SelectItem value="echeck">E-check</SelectItem>}
                 </SelectContent>
               </Select>
+              {bankConfig && !bankConfig.supportsTransfer && bankConfig.supportsEcheck && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-blue-600">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Este banco solo soporta E-checks</span>
+                </div>
+              )}
+              {bankConfig && !bankConfig.supportsEcheck && bankConfig.supportsTransfer && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-blue-600">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Este banco solo soporta Transferencias</span>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Formulario de Transferencias */}
-      {showTransferForm && (
+      {showTransferForm && bankConfig?.supportsTransfer && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -360,7 +388,12 @@ export default function BankFileProcessor() {
                         <SelectItem value="MEP-D20">MEP - D20</SelectItem>
                       </>
                     )}
-                    {selectedBank === "banco-comafi" && <SelectItem value="MEP-DL0">MEP - DL0</SelectItem>}
+                    {selectedBank === "banco-comafi" && (
+                      <>
+                        <SelectItem value="MEP-DL0">MEP - DL0</SelectItem>
+                        <SelectItem value="MEP-GC1">MEP - GC1</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
