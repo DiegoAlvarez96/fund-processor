@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: [],
-  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -12,7 +9,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: "standalone",
+  swcMinify: false,
+  experimental: {
+    esmExternals: false,
+  },
 }
 
-export default nextConfig
+module.exports = nextConfig
