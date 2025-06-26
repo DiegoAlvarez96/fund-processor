@@ -18,7 +18,7 @@ export default function Dashboard() {
           Bienvenido a <span className="text-blue-600">ADCAP OPERACIONES</span>
         </h1>
         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-          Sistema integral de gestión
+          Sistema integral de gestión financiera para el procesamiento de fondos de inversión y archivos bancarios
         </p>
       </div>
 
@@ -83,10 +83,9 @@ export default function Dashboard() {
       <div className="text-center py-8">
         <Card className="max-w-2xl mx-auto bg-gray-50">
           <CardContent className="pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sistema Seguro y Confiable</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sistema en Desarrollo</h3>
             <p className="text-gray-600">
-              Todas las operaciones están protegidas con autenticación segura y timeout de sesión automático. El sistema
-              mantiene un registro completo de todas las actividades realizadas.
+              En creación, chequear funcionalidades y reportar cualquier inconveniente al equipo de desarrollo.
             </p>
           </CardContent>
         </Card>
