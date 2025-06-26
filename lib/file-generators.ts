@@ -56,7 +56,7 @@ export function fractionateTransfers(data: TransferData): Array<{
 export function generateValoresTransferFile(transfers: Array<any>, tipoTransferencia: string): string {
   const lines = transfers.map((transfer) => {
     const tipo = tipoTransferencia.replace("MEP-", "")
-    const codigoBanco = transfer.cbuDestino.substring(0, 4) // ✅ Primeros 4 dígitos del CBU destino
+    const codigoBanco = transfer.cbuDestino.substring(0, 3) // ✅ Primeros 3 dígitos del CBU destino
 
     return [
       tipo, // GC1, DL0, D20
