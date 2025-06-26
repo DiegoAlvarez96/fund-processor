@@ -9,10 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  swcMinify: false,
-  experimental: {
-    esmExternals: false,
-  },
+  output: "standalone",
 }
 
 module.exports = nextConfig
