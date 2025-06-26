@@ -154,9 +154,7 @@ export default function MainApp() {
       },
       (SESSION_TIMEOUT_MINUTES - WARNING_MINUTES) * 60 * 1000,
     )
-
-
-  }, [toast])
+  }, [])
 
   // Función para resetear actividad del usuario
   const resetUserActivity = useCallback(() => {
