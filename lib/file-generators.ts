@@ -1,4 +1,4 @@
-import { BANK_CONFIGS } from "./bank-config"
+import { BANK_CONFIGS, getCuitByCBU } from "./bank-config"
 
 export interface TransferData {
   cuentaOrigen: string
@@ -28,6 +28,11 @@ function generateOperationNumber(): string {
   return `${timestamp}${counter}` // Combina timestamp + contador
 }
 
+// Generar timestamp para transferencias inmediatas
+function generateTimestamp(): string {
+  return Date.now().toString()
+}
+
 // Fraccionar transferencias según monto máximo
 export function fractionateTransfers(data: TransferData): Array<{
   cuentaOrigen: string
@@ -52,8 +57,33 @@ export function fractionateTransfers(data: TransferData): Array<{
   return transfers
 }
 
+// Generar archivo de transferencias inmediatas para Banco de Valores
+export function generateValoresInmediataFile(transfers: Array<any>, data: TransferData): string {
+  // Obtener CUIT del CBU destino
+  const cuitInfo = getCuitByCBU(data.tipoTransferencia, data.banco, data.cbuDestino)
+  const cuitDestino = cuitInfo?.cuit || "30711610126" // CUIT por defecto
+
+  const lines = transfers.map((transfer) => {
+    const timestamp = generateTimestamp()
+
+    return [
+      "*M*", // Tipo de registro fijo
+      transfer.cbuDestino, // CBU/CVU destino
+      transfer.importe.toFixed(2), // Importe
+      "VAR", // Motivo (obligatorio)
+      "TRANSFER INM", // Motivo (no obligatorio)
+      timestamp, // Timestamp
+      "observa", // Observaciones
+      cuitDestino, // CUIT de la cuenta de crédito (dinámico)
+      "", // Espacios en blanco
+    ].join(";")
+  })
+
+  return lines.join("\n")
+}
+
 // Generar archivo de mismo banco para Banco de Valores
-export function generateValoresMismoBancoFile(transfers: Array<any>): string {
+export function generateValoresMismoBancoFile(transfers: Array<any>, data: TransferData): string {
   const lines = transfers.map((transfer) => {
     // Determinar observaciones según cuenta destino
     let observaciones = "ADCAP SECURITIES 545" // Default
@@ -79,7 +109,11 @@ export function generateValoresMismoBancoFile(transfers: Array<any>): string {
 }
 
 // Generar archivo D20 para Banco de Valores
-export function generateValoresD20File(transfers: Array<any>): string {
+export function generateValoresD20File(transfers: Array<any>, data: TransferData): string {
+  // Obtener CUIT del CBU destino
+  const cuitInfo = getCuitByCBU(data.tipoTransferencia, data.banco, data.cbuDestino)
+  const cuitDestino = cuitInfo?.cuit || "30711610126" // CUIT por defecto
+
   const lines = transfers.map((transfer) => {
     return (
       [
@@ -87,7 +121,7 @@ export function generateValoresD20File(transfers: Array<any>): string {
         transfer.cuentaOrigen, // Cuenta origen
         "", // Campo vacío
         transfer.cbuDestino, // Cuenta destino (22500, 22204, etc.)
-        "30711610126", // CUIT fijo
+        cuitDestino, // CUIT dinámico según CBU destino
         "", // Campo vacío
         transfer.importe.toFixed(2), // Importe
         "1", // Campo fijo
@@ -106,7 +140,12 @@ export function generateValoresD20File(transfers: Array<any>): string {
 }
 
 // Generar archivo DL0 para Banco de Valores
-export function generateValoresDL0File(transfers: Array<any>): string {
+export function generateValoresDL0File(transfers: Array<any>, data: TransferData): string {
+  // Obtener CUIT y nombre del CBU destino
+  const cuitInfo = getCuitByCBU(data.tipoTransferencia, data.banco, data.cbuDestino)
+  const cuitDestino = cuitInfo?.cuit || "30711610126" // CUIT por defecto
+  const nombreOrdenante = cuitInfo?.nombre || "ADCAPSECURITIES ARG" // Nombre por defecto
+
   const lines = transfers.map((transfer) => {
     const codigoBanco = transfer.cbuDestino.substring(0, 4) // ✅ Primeros 4 dígitos del CBU destino
 
@@ -116,8 +155,8 @@ export function generateValoresDL0File(transfers: Array<any>): string {
         transfer.cuentaOrigen, // Cuenta origen
         transfer.cbuDestino, // CBU destino completo
         codigoBanco, // Código banco (primeros 4 dígitos)
-        "30711610126", // CUIT fijo
-        "ADCAPSECURITIES ARG", // Nombre ordenante fijo
+        cuitDestino, // CUIT dinámico
+        nombreOrdenante, // Nombre dinámico
         transfer.importe.toFixed(2), // Importe
         "VAR", // Campo fijo
         "S", // Campo fijo
@@ -131,7 +170,16 @@ export function generateValoresDL0File(transfers: Array<any>): string {
 }
 
 // Generar archivo de transferencias para Banco de Valores (GC1 y otros)
-export function generateValoresTransferFile(transfers: Array<any>, tipoTransferencia: string): string {
+export function generateValoresTransferFile(
+  transfers: Array<any>,
+  tipoTransferencia: string,
+  data: TransferData,
+): string {
+  // Obtener CUIT y nombre del CBU destino
+  const cuitInfo = getCuitByCBU(tipoTransferencia, data.banco, data.cbuDestino)
+  const cuitOrdenante = cuitInfo?.cuit || "30604731018" // CUIT por defecto
+  const nombreOrdenante = cuitInfo?.nombre || "BCSD ADCAP FCI" // Nombre por defecto
+
   const lines = transfers.map((transfer) => {
     const tipo = tipoTransferencia.replace("MEP-", "")
     const codigoBanco = transfer.cbuDestino.substring(0, 3) // ✅ Primeros 3 dígitos del CBU destino
@@ -142,8 +190,8 @@ export function generateValoresTransferFile(transfers: Array<any>, tipoTransfere
         transfer.cuentaOrigen, // Cuenta origen
         transfer.cbuDestino, // CBU destino
         codigoBanco, // ✅ Código banco extraído del CBU destino
-        "30604731018", // CUIT ordenante fijo
-        "BCSD ADCAP FCI", // Nombre ordenante fijo
+        cuitOrdenante, // CUIT dinámico
+        nombreOrdenante, // Nombre dinámico
         transfer.importe.toFixed(2), // Importe
         "", // Campo vacío
         "N", // Campo N
@@ -158,20 +206,33 @@ export function generateValoresTransferFile(transfers: Array<any>, tipoTransfere
   return lines.join("")
 }
 
-// Generar archivo de transferencias para Comafi
-export function generateComafiTransferFile(transfers: Array<any>): string {
-  const header = "CBU_ORIGEN,CBU_DESTINO,IMPORTE,CONCEPTO,REFERENCIA"
-  const lines = transfers.map((transfer) =>
-    [
-      transfer.cuentaOrigen, // ✅ CUENTA ORIGEN SELECCIONADA
-      transfer.cbuDestino,
-      transfer.importe.toFixed(2),
-      "TRANSFERENCIA AUTOMATICA",
-      `OP-${transfer.numeroOperacion}`,
-    ].join(";"),
+// Generar archivo de transferencias para Comafi (DL0 y GC1)
+export function generateComafiTransferFile(transfers: Array<any>, data: TransferData): string {
+  // Obtener CUIT y nombre del CBU destino
+  const cuitInfo = getCuitByCBU(data.tipoTransferencia, data.banco, data.cbuDestino)
+  const cuitDestino = cuitInfo?.cuit || "30711610126" // CUIT por defecto
+  const nombreOrdenante = cuitInfo?.nombre || "ADCAP SECURITIES ARGENTINA SA" // Nombre por defecto
+
+  const lines = []
+
+  // Header
+  lines.push(
+    "Tipo de Transferencia;Codigo;IMPORTE;CONCEPTO / MOTIVO;NUMERO DE CBU - ORDENANTE;C.U.I.T./C.U.I.L. ORDENANTE;NOMBRE ORDENANTE;ORDENANTE PEP;NUMERO DE CBU - BENEFICIARIO;NRO.DE CUIT/CUIL BENEFICIARIO;;;",
   )
 
-  return [header, ...lines].join("\n")
+  // Transferencias
+  transfers.forEach((transfer) => {
+    lines.push(
+      `Transferencias al mismo titular $;DL0;${transfer.importe.toFixed(2).replace(".", ",")};VAR;${transfer.cuentaOrigen};${cuitDestino};${nombreOrdenante};NO;${transfer.cbuDestino};${cuitDestino};;;`,
+    )
+  })
+
+  // Footer con declaración
+  lines.push(
+    "VAR - Varios   ;;;;;Afirmamos que los datos consignados en la presente, son correctos completos y que esta declaración se ha confeccionado sin omitir ni falsear dato alguno, siendo fiel expresión de la verdad.  Asimismo, declaramos que los fondos de la operatoria provienen de actividad/es lícita/s de acuerdo a la normativa vigente en materia de Prevención de Lavado de Dinero y Financiamiento del Terrorismo.;;;;;;;",
+  )
+
+  return lines.join("\n")
 }
 
 // Generar archivo de transferencias para Comercio
@@ -280,22 +341,25 @@ export function generateBankFile(
 
     switch (banco) {
       case "banco-valores":
-        if (data.tipoTransferencia === "mismo-banco") {
-          content = generateValoresMismoBancoFile(transfers)
+        if (data.tipoTransferencia === "inmediata") {
+          content = generateValoresInmediataFile(transfers, data as TransferData)
+          filename = `INMEDIATA_VALORES_${timestamp}.txt`
+        } else if (data.tipoTransferencia === "mismo-banco") {
+          content = generateValoresMismoBancoFile(transfers, data as TransferData)
           filename = `MISMO_BANCO_VALORES_${timestamp}.txt`
         } else if (data.tipoTransferencia === "MEP-D20") {
-          content = generateValoresD20File(transfers)
+          content = generateValoresD20File(transfers, data as TransferData)
           filename = `MEP_D20_VALORES_${timestamp}.txt`
         } else if (data.tipoTransferencia === "MEP-DL0") {
-          content = generateValoresDL0File(transfers)
+          content = generateValoresDL0File(transfers, data as TransferData)
           filename = `MEP_DL0_VALORES_${timestamp}.txt`
         } else {
-          content = generateValoresTransferFile(transfers, data.tipoTransferencia)
+          content = generateValoresTransferFile(transfers, data.tipoTransferencia, data as TransferData)
           filename = `MEP_${data.tipoTransferencia.replace("MEP-", "")}_VALORES_${timestamp}.txt`
         }
         break
       case "banco-comafi":
-        content = generateComafiTransferFile(transfers)
+        content = generateComafiTransferFile(transfers, data as TransferData)
         filename = `MEP_COMAFI_${data.tipoTransferencia.replace("MEP-", "")}_${timestamp}.csv`
         break
       case "banco-comercio":
