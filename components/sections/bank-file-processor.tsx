@@ -22,9 +22,10 @@ import {
   AlertCircle,
   Search,
   RefreshCw,
+  Info,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN_POR_BANCO } from "@/lib/bank-config"
+import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN_POR_BANCO, getCuitByCBU } from "@/lib/bank-config"
 import { generateBankFile, type TransferData, type EcheckData } from "@/lib/file-generators"
 import { getCuitByComitente, debugComitenteData } from "@/lib/comitente-lookup"
 
@@ -97,6 +98,12 @@ export default function BankFileProcessor() {
 
   // Obtener cuentas origen disponibles según el banco seleccionado
   const availableOriginAccounts = selectedBank ? CUENTAS_ORIGEN_POR_BANCO[selectedBank] || [] : []
+
+  // Obtener información del CBU seleccionado
+  const selectedCBUInfo =
+    transferData.cbuDestino && transferData.tipoTransferencia && selectedBank
+      ? getCuitByCBU(transferData.tipoTransferencia, selectedBank, transferData.cbuDestino)
+      : null
 
   // Manejar selección de banco
   const handleBankChange = (bank: string) => {
@@ -564,7 +571,12 @@ export default function BankFileProcessor() {
                     <SelectContent>
                       {availableCBUs.map((cuenta) => (
                         <SelectItem key={cuenta.value} value={cuenta.value}>
-                          {cuenta.label}
+                          <div className="flex flex-col">
+                            <span>{cuenta.label}</span>
+                            <span className="text-xs text-gray-500">
+                              CUIT: {cuenta.cuit} - {cuenta.nombre}
+                            </span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -575,6 +587,22 @@ export default function BankFileProcessor() {
                     onChange={(e) => setTransferData((prev) => ({ ...prev, cbuDestino: e.target.value }))}
                     placeholder="Ingrese CBU destino manualmente"
                   />
+                )}
+
+                {/* Mostrar información del CBU seleccionado */}
+                {selectedCBUInfo && (
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 text-blue-700">
+                      <Info className="w-4 h-4" />
+                      <span className="font-medium">Información del CBU Destino</span>
+                    </div>
+                    <p className="text-blue-600 text-sm mt-1">
+                      <strong>CUIT:</strong> {selectedCBUInfo.cuit}
+                    </p>
+                    <p className="text-blue-600 text-sm">
+                      <strong>Nombre:</strong> {selectedCBUInfo.nombre}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -619,6 +647,11 @@ export default function BankFileProcessor() {
                   Última transferencia:{" "}
                   {formatNumber(transferData.importeTotal % transferData.montoMaximo || transferData.montoMaximo)}
                 </p>
+                {selectedCBUInfo && (
+                  <p className="text-blue-600 text-sm">
+                    <strong>Se usará CUIT:</strong> {selectedCBUInfo.cuit} ({selectedCBUInfo.nombre})
+                  </p>
+                )}
               </div>
             )}
 
