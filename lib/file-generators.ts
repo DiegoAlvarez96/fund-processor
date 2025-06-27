@@ -264,25 +264,57 @@ export function generateBindTransferFile(transfers: Array<any>): string {
   return [header, ...lines].join("\n")
 }
 
+// Reemplazar la función generateComafiEcheckFile con el formato correcto:
+
 // Generar archivo de E-checks para Comafi
 export function generateComafiEcheckFile(echecks: EcheckData[]): string {
-  const header =
-    "CUIT del Beneficiario,Importe,Multi_Echeq,Cantidad,Fecha de pago,Caracter,Cruzado,Concepto,Descripción del Echeq"
-  const lines = echecks.map((echeck) =>
-    [
-      echeck.cuitBeneficiario,
-      echeck.importe.toFixed(2),
-      "NO",
-      "1",
-      echeck.fechaPago,
-      "A la orden",
-      "SI",
-      "VAR",
-      echeck.referencia,
-    ].join(","),
+  const lines = []
+
+  // Header con todos los campos
+  lines.push(
+    "tipo;cantidad;modo;cuit/cuil;nombre_beneficiario;monto;fecha;motivo_pago;cmc7;email;texto_email;referencia_codigo_1;referencia_valor_1;referencia_codigo_2;referencia_valor_2;referencia_codigo_3;referencia_valor_3;caracter;concepto",
   )
 
-  return [header, ...lines].join("\n")
+  // Calcular cantidad y monto total
+  const cantidad = echecks.length
+  const montoTotal = echecks.reduce((sum, echeck) => sum + echeck.importe, 0)
+
+  // Línea H (header con totales)
+  lines.push(`H;${cantidad};;;;${montoTotal.toFixed(2).replace(".", ",")};;;;;;;;;;;;;`)
+
+  // Líneas R (registros de e-checks)
+  echecks.forEach((echeck) => {
+    lines.push(
+      [
+        "R", // Tipo de registro
+        "", // cantidad (vacío para registros)
+        "1", // modo
+        echeck.cuitBeneficiario, // cuit/cuil
+        echeck.referencia, // nombre_beneficiario (usamos referencia como nombre)
+        echeck.importe
+          .toFixed(2)
+          .replace(".", ","), // monto con coma decimal
+        echeck.fechaPago
+          .split("-")
+          .reverse()
+          .join("/"), // fecha en formato DD/MM/YYYY
+        "Op Bursatil", // motivo_pago
+        "", // cmc7 (vacío)
+        echeck.email || "tesoreria@ad-cap.com.ar", // email
+        "echeq", // texto_email
+        "Rescate", // referencia_codigo_1
+        "22200000000000000000", // referencia_valor_1 (corregido)
+        "1111111111", // referencia_codigo_2
+        "22200000000000000000", // referencia_valor_2 (corregido)
+        "1111111111", // referencia_codigo_3
+        "22200000000000000000", // referencia_valor_3 (corregido)
+        "1", // caracter
+        "Varios", // concepto
+      ].join(";"),
+    )
+  })
+
+  return lines.join("\n")
 }
 
 // Generar archivo de E-checks para Comercio
