@@ -21,12 +21,12 @@ import {
   ArrowRight,
   AlertCircle,
   Search,
-  Bug,
+  RefreshCw,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN_POR_BANCO } from "@/lib/bank-config"
 import { generateBankFile, type TransferData, type EcheckData } from "@/lib/file-generators"
-import { getCuitByComitente, debugComitenteCache } from "@/lib/comitente-lookup"
+import { getCuitByComitente, debugComitenteData } from "@/lib/comitente-lookup"
 
 interface EcheckEntry {
   id: string
@@ -77,12 +77,12 @@ export default function BankFileProcessor() {
     })
   }
 
-  // Función de debug para el cache
-  const handleDebugCache = async () => {
-    await debugComitenteCache()
+  // Función de debug para los datos (sin cache)
+  const handleDebugData = async () => {
+    await debugComitenteData()
     toast({
       title: "Debug ejecutado",
-      description: "Revisa la consola del navegador para ver los detalles",
+      description: "Revisa la consola del navegador para ver los datos frescos",
     })
   }
 
@@ -427,10 +427,10 @@ export default function BankFileProcessor() {
           <p className="text-gray-600">Genera archivos de transferencias y e-checks para diferentes bancos</p>
         </div>
 
-        {/* Botón de debug */}
-        <Button variant="outline" onClick={handleDebugCache} className="bg-yellow-50 text-yellow-700 border-yellow-200">
-          <Bug className="w-4 h-4 mr-2" />
-          Debug Cache
+        {/* Botón de debug (sin cache) */}
+        <Button variant="outline" onClick={handleDebugData} className="bg-green-50 text-green-700 border-green-200">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Debug Datos Frescos
         </Button>
       </div>
 
@@ -723,15 +723,14 @@ export default function BankFileProcessor() {
                       </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 text-blue-700">
-                          <AlertCircle className="w-4 h-4" />
-                          <span className="font-medium">Búsqueda Automática de CUIT</span>
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <div className="flex items-center gap-2 text-green-700">
+                          <RefreshCw className="w-4 h-4" />
+                          <span className="font-medium">Datos Siempre Frescos</span>
                         </div>
-                        <p className="text-blue-600 text-sm mt-1">
-                          Si no se informa CUIT en los datos, el sistema buscará automáticamente usando el número de
-                          comitente en la base de datos. Usa el botón "Debug Cache" para verificar que los datos estén
-                          cargados.
+                        <p className="text-green-600 text-sm mt-1">
+                          El sistema ahora carga los datos directamente del archivo CSV sin cache. Cada búsqueda obtiene
+                          la información más actualizada. Usa "Debug Datos Frescos" para verificar.
                         </p>
                       </div>
 
