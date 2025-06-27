@@ -756,17 +756,6 @@ export default function BankFileProcessor() {
                       </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
-                      <div className="bg-green-50 p-4 rounded-lg">
-                        <div className="flex items-center gap-2 text-green-700">
-                          <RefreshCw className="w-4 h-4" />
-                          <span className="font-medium">Datos Siempre Frescos</span>
-                        </div>
-                        <p className="text-green-600 text-sm mt-1">
-                          El sistema ahora carga los datos directamente del archivo CSV sin cache. Cada búsqueda obtiene
-                          la información más actualizada. Usa "Debug Datos Frescos" para verificar.
-                        </p>
-                      </div>
-
                       <div>
                         <Label>Tipo de Formato</Label>
                         <Select
@@ -783,6 +772,15 @@ export default function BankFileProcessor() {
                             <SelectItem value="confirmacion-solicitudes">Confirmación de Solicitudes</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <div className="flex items-center gap-2 text-blue-700">
+                          <Info className="w-4 h-4" />
+                          <span className="font-medium">Configuración de E-checks</span>
+                        </div>
+                        <p className="text-blue-600 text-sm mt-1">
+                          <strong>Email por defecto:</strong> tesoreria@ad-cap.com.ar
+                        </p>
                       </div>
 
                       {bulkEcheckFormat && (
