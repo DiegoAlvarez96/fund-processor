@@ -19,42 +19,17 @@ export interface ComitenteData {
   paisResidencia: string
 }
 
-// Cache para los datos de comitentes
-let comitenteCache: Map<string, ComitenteData> | null = null
-
-// Función mejorada para parsear CSV que maneja comillas y comas dentro de campos
-function parseCSVLine(line: string): string[] {
-  const result: string[] = []
-  let current = ""
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-
-    if (char === '"') {
-      inQuotes = !inQuotes
-    } else if (char === "," && !inQuotes) {
-      result.push(current.trim())
-      current = ""
-    } else {
-      current += char
-    }
-  }
-
-  result.push(current.trim())
-  return result
+// Función para parsear líneas separadas por TABULACIONES (no comas)
+function parseTSVLine(line: string): string[] {
+  // El archivo usa tabulaciones como separador
+  return line.split("\t").map((field) => field.trim())
 }
 
-// Función para cargar y parsear el archivo CSV de comitentes
+// Función para cargar y parsear el archivo CSV de comitentes (SIN CACHE)
 export async function loadComitenteData(): Promise<Map<string, ComitenteData>> {
-  if (comitenteCache) {
-    console.log(`📋 Usando cache existente con ${comitenteCache.size} comitentes`)
-    return comitenteCache
-  }
-
   try {
-    console.log("🔄 Cargando archivo de comitentes...")
-    const response = await fetch("/data/relacion-ctte-cp.csv")
+    console.log("🔄 Cargando archivo de comitentes (sin cache)...")
+    const response = await fetch("/data/relacion-ctte-cp.csv?" + Date.now()) // Cache busting
     if (!response.ok) {
       throw new Error(`Error al cargar archivo de comitentes: ${response.status}`)
     }
@@ -69,9 +44,10 @@ export async function loadComitenteData(): Promise<Map<string, ComitenteData>> {
       throw new Error("El archivo CSV debe tener al menos un header y una línea de datos")
     }
 
-    // Mostrar header para debug
-    const headers = parseCSVLine(lines[0])
+    // Mostrar header para debug (usando tabulaciones)
+    const headers = parseTSVLine(lines[0])
     console.log("📋 Headers encontrados:", headers)
+    console.log(`📋 Total headers: ${headers.length}`)
 
     const dataMap = new Map<string, ComitenteData>()
 
@@ -81,7 +57,9 @@ export async function loadComitenteData(): Promise<Map<string, ComitenteData>> {
       if (!line) continue
 
       try {
-        const values = parseCSVLine(line)
+        const values = parseTSVLine(line) // Usar tabulaciones
+
+        console.log(`📋 Línea ${i}: ${values.length} campos`, values.slice(0, 3)) // Mostrar primeros 3 campos
 
         if (values.length >= 9) {
           // Al menos necesitamos hasta CUIT/CUIL
@@ -116,19 +94,24 @@ export async function loadComitenteData(): Promise<Map<string, ComitenteData>> {
                 cuenta: cuentaKey,
                 nombre: comitenteData.comitente,
                 cuit: comitenteData.cuitCuil,
+                linea: i,
+                valoresCompletos: values,
               })
             }
+          } else {
+            console.log(`⚠️ Línea ${i}: cuenta="${cuentaKey}", cuit="${comitenteData.cuitCuil.trim()}"`)
           }
         } else {
           console.warn(`⚠️ Línea ${i + 1} tiene ${values.length} campos, esperados al menos 9`)
+          console.warn(`⚠️ Contenido: ${line.substring(0, 100)}...`)
         }
       } catch (error) {
         console.warn(`⚠️ Error procesando línea ${i + 1}:`, error)
+        console.warn(`⚠️ Contenido de la línea: ${line}`)
       }
     }
 
-    comitenteCache = dataMap
-    console.log(`✅ Cargados ${dataMap.size} comitentes en cache`)
+    console.log(`✅ Cargados ${dataMap.size} comitentes (datos frescos)`)
 
     // Mostrar algunos ejemplos para debug
     const ejemplos = Array.from(dataMap.entries()).slice(0, 5)
@@ -141,6 +124,21 @@ export async function loadComitenteData(): Promise<Map<string, ComitenteData>> {
       })),
     )
 
+    // Verificar específicamente si 52863 está en el mapa
+    if (dataMap.has("52863")) {
+      const data52863 = dataMap.get("52863")!
+      console.log("✅ Comitente 52863 CONFIRMADO en el mapa:", {
+        cuenta: "52863",
+        nombre: data52863.comitente,
+        cuit: data52863.cuitCuil,
+      })
+    } else {
+      console.log("❌ Comitente 52863 NO está en el mapa final")
+      // Mostrar todas las claves para debug
+      const todasLasClaves = Array.from(dataMap.keys()).sort()
+      console.log("🔍 Todas las claves en el mapa:", todasLasClaves.slice(0, 20))
+    }
+
     return dataMap
   } catch (error) {
     console.error("❌ Error al cargar datos de comitentes:", error)
@@ -149,14 +147,14 @@ export async function loadComitenteData(): Promise<Map<string, ComitenteData>> {
   }
 }
 
-// Función para buscar CUIT por número de comitente
+// Función para buscar CUIT por número de comitente (SIN CACHE)
 export async function getCuitByComitente(numeroComitente: string): Promise<string | null> {
   try {
-    const comitenteData = await loadComitenteData()
+    const comitenteData = await loadComitenteData() // Siempre carga datos frescos
     const numeroLimpio = numeroComitente.toString().trim()
 
     console.log(`🔍 Buscando CUIT para comitente: "${numeroLimpio}"`)
-    console.log(`📊 Total comitentes en cache: ${comitenteData.size}`)
+    console.log(`📊 Total comitentes cargados: ${comitenteData.size}`)
 
     // Buscar exacto
     const comitente = comitenteData.get(numeroLimpio)
@@ -166,24 +164,13 @@ export async function getCuitByComitente(numeroComitente: string): Promise<strin
       return comitente.cuitCuil.trim()
     }
 
-    // Si no encuentra, mostrar claves similares para debug
-    const clavesSimilares = Array.from(comitenteData.keys())
-      .filter((key) => key.includes(numeroLimpio) || numeroLimpio.includes(key))
-      .slice(0, 5)
+    // Debug adicional: mostrar todas las claves disponibles
+    const todasLasClaves = Array.from(comitenteData.keys()).sort()
+    console.log("🔍 Primeras 20 claves disponibles:", todasLasClaves.slice(0, 20))
 
-    if (clavesSimilares.length > 0) {
-      console.log(`🔍 Claves similares encontradas:`, clavesSimilares)
-    }
-
-    // Mostrar todas las claves que empiecen con los primeros dígitos
-    const prefijo = numeroLimpio.substring(0, 3)
-    const conPrefijo = Array.from(comitenteData.keys())
-      .filter((key) => key.startsWith(prefijo))
-      .slice(0, 10)
-
-    if (conPrefijo.length > 0) {
-      console.log(`🔍 Comitentes que empiezan con "${prefijo}":`, conPrefijo)
-    }
+    // Buscar claves que contengan el número
+    const clavesConNumero = todasLasClaves.filter((key) => key.includes(numeroLimpio))
+    console.log(`🔍 Claves que contienen "${numeroLimpio}":`, clavesConNumero)
 
     console.warn(`❌ No se encontró CUIT para comitente: "${numeroLimpio}"`)
     return null
@@ -193,10 +180,10 @@ export async function getCuitByComitente(numeroComitente: string): Promise<strin
   }
 }
 
-// Función para obtener información completa del comitente
+// Función para obtener información completa del comitente (SIN CACHE)
 export async function getComitenteInfo(numeroComitente: string): Promise<ComitenteData | null> {
   try {
-    const comitenteData = await loadComitenteData()
+    const comitenteData = await loadComitenteData() // Siempre carga datos frescos
     const numeroLimpio = numeroComitente.toString().trim()
     const comitente = comitenteData.get(numeroLimpio)
 
@@ -213,16 +200,10 @@ export async function getComitenteInfo(numeroComitente: string): Promise<Comiten
   }
 }
 
-// Función para limpiar el cache (útil para recargar datos)
-export function clearComitenteCache(): void {
-  comitenteCache = null
-  console.log("🗑️ Cache de comitentes limpiado")
-}
-
-// Función de debug para mostrar estadísticas del cache
-export async function debugComitenteCache(): Promise<void> {
-  const data = await loadComitenteData()
-  console.log("🔍 DEBUG - Estadísticas del cache:")
+// Función de debug para mostrar estadísticas (SIN CACHE)
+export async function debugComitenteData(): Promise<void> {
+  const data = await loadComitenteData() // Siempre carga datos frescos
+  console.log("🔍 DEBUG - Estadísticas de datos frescos:")
   console.log(`📊 Total comitentes: ${data.size}`)
 
   // Mostrar algunos ejemplos
@@ -238,8 +219,16 @@ export async function debugComitenteCache(): Promise<void> {
   // Buscar específicamente el 52863
   const test52863 = data.get("52863")
   if (test52863) {
-    console.log("🎯 Comitente 52863 en cache:", test52863)
+    console.log("🎯 Comitente 52863 encontrado:", test52863)
   } else {
-    console.log("❌ Comitente 52863 NO encontrado en cache")
+    console.log("❌ Comitente 52863 NO encontrado")
   }
+
+  // Mostrar todos los comitentes que empiecen con "528"
+  const con528 = Array.from(data.keys()).filter((key) => key.startsWith("528"))
+  console.log("🔍 Comitentes que empiezan con '528':", con528)
+
+  // Mostrar las primeras 20 claves para debug
+  const todasLasClaves = Array.from(data.keys()).sort()
+  console.log("🔍 Primeras 20 claves:", todasLasClaves.slice(0, 20))
 }
