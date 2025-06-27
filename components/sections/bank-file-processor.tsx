@@ -61,6 +61,7 @@ export default function BankFileProcessor() {
     email: "",
   })
   const [bulkEcheckText, setBulkEcheckText] = useState("")
+  const [bulkEcheckFormat, setBulkEcheckFormat] = useState<"ordenes-pago" | "confirmacion-solicitudes" | "">("")
 
   const { toast } = useToast()
 
@@ -187,10 +188,10 @@ export default function BankFileProcessor() {
 
   // Procesar e-checks masivos desde texto
   const processBulkEchecks = () => {
-    if (!bulkEcheckText.trim()) {
+    if (!bulkEcheckText.trim() || !bulkEcheckFormat) {
       toast({
-        title: "Texto requerido",
-        description: "Ingrese los datos de los e-checks",
+        title: "Datos requeridos",
+        description: "Seleccione el formato e ingrese los datos de los e-checks",
         variant: "destructive",
       })
       return
@@ -200,32 +201,81 @@ export default function BankFileProcessor() {
       const lines = bulkEcheckText.trim().split("\n")
       const newEchecks: EcheckEntry[] = []
 
-      lines.forEach((line, index) => {
-        const parts = line.split(";").map((part) => part.trim())
-        if (parts.length >= 4) {
-          newEchecks.push({
-            id: `${Date.now()}-${index}`,
-            cuitBeneficiario: parts[0],
-            importe: Number.parseFloat(parts[1]) || 0,
-            referencia: parts[2],
-            fechaPago: parts[3],
-            email: parts[4] || "",
-          })
-        }
-      })
+      // Saltar la primera línea (header)
+      const dataLines = lines.slice(1)
+
+      if (bulkEcheckFormat === "ordenes-pago") {
+        // Formato: Estado	Comitente (Número)	Comitente (Denominación)	Moneda (Descripción)	Importe	Comitente (CUIT)	Modalidad de Pago	Oficial de Cuenta
+        dataLines.forEach((line, index) => {
+          const parts = line.split("\t").map((part) => part.trim())
+          if (parts.length >= 6 && parts[0] === "Liquidada" && parts[6] === "Echeq") {
+            // Limpiar el importe (remover puntos de miles y reemplazar coma por punto)
+            const importeStr = parts[4].replace(/\./g, "").replace(",", ".")
+            const importe = Number.parseFloat(importeStr) || 0
+
+            newEchecks.push({
+              id: `${Date.now()}-${index}`,
+              cuitBeneficiario: parts[5], // Comitente (CUIT)
+              importe: importe,
+              referencia: parts[2], // Comitente (Denominación)
+              fechaPago: new Date().toISOString().split("T")[0], // Fecha actual
+              email: "",
+            })
+          }
+        })
+      } else if (bulkEcheckFormat === "confirmacion-solicitudes") {
+        // Formato: Fecha de Concertación	Comitente (Número)	Comitente (Descripción)	Moneda	Importe	CBU	CUIT	Banco	Forma de Pago (Echeq)	Número de Referencia	Estado	Forma de Pago (Descripción)	Hora de Ingreso
+        dataLines.forEach((line, index) => {
+          const parts = line.split("\t").map((part) => part.trim())
+          if (parts.length >= 11 && parts[10] === "Aprobada" && parts[8] === "-1") {
+            // Limpiar el importe (remover puntos de miles y reemplazar coma por punto)
+            const importeStr = parts[4].replace(/\./g, "").replace(",", ".")
+            const importe = Number.parseFloat(importeStr) || 0
+
+            // Convertir fecha de formato DD/M/YYYY a YYYY-MM-DD
+            const fechaConcertacion = parts[0]
+            let fechaFormateada = new Date().toISOString().split("T")[0] // Default a hoy
+
+            try {
+              const [dia, mes, año] = fechaConcertacion.split("/")
+              fechaFormateada = `${año}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`
+            } catch (error) {
+              console.warn("Error al parsear fecha:", fechaConcertacion)
+            }
+
+            // Extraer CUIT del campo CUIT (puede estar vacío)
+            let cuit = parts[6] || ""
+            // Si no hay CUIT, intentar extraerlo de otro campo o usar uno por defecto
+            if (!cuit) {
+              cuit = "00000000000" // CUIT por defecto o se puede extraer de otro lado
+            }
+
+            newEchecks.push({
+              id: `${Date.now()}-${index}`,
+              cuitBeneficiario: cuit,
+              importe: importe,
+              referencia: parts[2], // Comitente (Descripción)
+              fechaPago: fechaFormateada, // Fecha de Concertación
+              email: "",
+            })
+          }
+        })
+      }
 
       setEcheckEntries((prev) => [...prev, ...newEchecks])
       setBulkEcheckText("")
+      setBulkEcheckFormat("")
       setShowBulkEcheckDialog(false)
 
       toast({
         title: "E-checks procesados",
-        description: `Se agregaron ${newEchecks.length} e-checks`,
+        description: `Se agregaron ${newEchecks.length} e-checks desde ${bulkEcheckFormat === "ordenes-pago" ? "Órdenes de Pago" : "Confirmación de Solicitudes"}`,
       })
     } catch (error) {
       toast({
         title: "Error al procesar",
-        description: "Verifique el formato de los datos",
+        description:
+          "Verifique el formato de los datos. Asegúrese de incluir el header y que los datos estén separados por tabulaciones.",
         variant: "destructive",
       })
     }
@@ -584,25 +634,61 @@ export default function BankFileProcessor() {
                       Carga Masiva
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
+                  <DialogContent className="max-w-4xl">
                     <DialogHeader>
                       <DialogTitle>Carga Masiva de E-checks</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
-                        <Label>Datos de E-checks</Label>
-                        <p className="text-sm text-gray-500 mb-2">
-                          Formato: CUIT;Importe;Referencia;Fecha;Email (uno por línea)
-                        </p>
-                        <Textarea
-                          value={bulkEcheckText}
-                          onChange={(e) => setBulkEcheckText(e.target.value)}
-                          placeholder="30123456789;150000.00;PAGO SERVICIOS;2025-01-30;email@ejemplo.com"
-                          rows={10}
-                        />
+                        <Label>Tipo de Formato</Label>
+                        <Select
+                          value={bulkEcheckFormat}
+                          onValueChange={(value: "ordenes-pago" | "confirmacion-solicitudes") =>
+                            setBulkEcheckFormat(value)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar formato" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ordenes-pago">Órdenes de Pago</SelectItem>
+                            <SelectItem value="confirmacion-solicitudes">Confirmación de Solicitudes</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <div className="flex gap-2">
-                        <Button onClick={processBulkEchecks} className="flex-1">
+
+                      {bulkEcheckFormat && (
+                        <div>
+                          <Label>Datos de E-checks</Label>
+                          {bulkEcheckFormat === "ordenes-pago" ? (
+                            <p className="text-sm text-gray-500 mb-2">
+                              Pegue los datos copiados desde "Status Órdenes de Pago" (incluya el header con las
+                              columnas)
+                            </p>
+                          ) : (
+                            <p className="text-sm text-gray-500 mb-2">
+                              Pegue los datos copiados desde "Confirmación de Solicitudes" (incluya el header con las
+                              columnas).
+                              <br />
+                              <strong>Solo se procesarán:</strong> Estado = "Aprobada" y Forma de Pago (Echeq) = "-1"
+                            </p>
+                          )}
+                          <Textarea
+                            value={bulkEcheckText}
+                            onChange={(e) => setBulkEcheckText(e.target.value)}
+                            placeholder={
+                              bulkEcheckFormat === "ordenes-pago"
+                                ? "Estado\tComitente (Número)\tComitente (Denominación)\tMoneda (Descripción)\tImporte\tComitente (CUIT)\tModalidad de Pago\tOficial de Cuenta\nLiquidada\t1358\tTRANSPORTADORA DE GAS DEL SUR S.A.\tPesos\t5477538085\t30657862068\tEcheq\tSORUCO, JAVIER"
+                                : "Fecha de Concertación\tComitente (Número)\tComitente (Descripción)\tMoneda\tImporte\tCBU\tCUIT\tBanco\tForma de Pago (Echeq)\tNúmero de Referencia\tEstado\tForma de Pago (Descripción)\tHora de Ingreso\n4/6/2025\t153709\tCONTEXTO ECONOMICO SRL\tPesos\t35701343,4\t\t\t\t-1\t#19914504\tAprobada\tBanco Comafi S.A. $\t4/6/2025"
+                            }
+                            rows={12}
+                            className="font-mono text-sm"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-4">
+                        <Button onClick={processBulkEchecks} className="flex-1" disabled={!bulkEcheckFormat}>
                           Procesar E-checks
                         </Button>
                         <Button variant="outline" onClick={() => setShowBulkEcheckDialog(false)} className="flex-1">
