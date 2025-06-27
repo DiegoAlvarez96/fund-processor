@@ -21,11 +21,12 @@ import {
   ArrowRight,
   AlertCircle,
   Search,
+  Bug,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { BANK_CONFIGS, CBU_PRESETS, CUENTAS_ORIGEN_POR_BANCO } from "@/lib/bank-config"
 import { generateBankFile, type TransferData, type EcheckData } from "@/lib/file-generators"
-import { getCuitByComitente } from "@/lib/comitente-lookup"
+import { getCuitByComitente, debugComitenteCache } from "@/lib/comitente-lookup"
 
 interface EcheckEntry {
   id: string
@@ -73,6 +74,15 @@ export default function BankFileProcessor() {
     return value.toLocaleString("es-AR", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
+    })
+  }
+
+  // Función de debug para el cache
+  const handleDebugCache = async () => {
+    await debugComitenteCache()
+    toast({
+      title: "Debug ejecutado",
+      description: "Revisa la consola del navegador para ver los detalles",
     })
   }
 
@@ -204,6 +214,10 @@ export default function BankFileProcessor() {
       const lines = bulkEcheckText.trim().split("\n")
       const newEchecks: EcheckEntry[] = []
       let cuitLookupCount = 0
+      let cuitFoundCount = 0
+
+      console.log("🚀 Iniciando procesamiento masivo de e-checks...")
+      console.log(`📊 Total líneas a procesar: ${lines.length - 1}`) // -1 por el header
 
       // Saltar la primera línea (header)
       const dataLines = lines.slice(1)
@@ -214,6 +228,8 @@ export default function BankFileProcessor() {
           const line = dataLines[index]
           const parts = line.split("\t").map((part) => part.trim())
 
+          console.log(`📋 Procesando línea ${index + 1}:`, parts)
+
           if (parts.length >= 6 && parts[0] === "Liquidada" && parts[6] === "Echeq") {
             // Limpiar el importe (remover puntos de miles y reemplazar coma por punto)
             const importeStr = parts[4].replace(/\./g, "").replace(",", ".")
@@ -222,18 +238,24 @@ export default function BankFileProcessor() {
             let cuit = parts[5] // Comitente (CUIT)
             const numeroComitente = parts[1] // Comitente (Número)
 
+            console.log(`🔍 Procesando comitente ${numeroComitente}, CUIT original: "${cuit}"`)
+
             // Si no hay CUIT, buscar por número de comitente
-            if (!cuit || cuit.trim() === "") {
-              console.log(`Buscando CUIT para comitente ${numeroComitente}...`)
+            if (!cuit || cuit.trim() === "" || cuit === "0") {
+              console.log(`🔍 Buscando CUIT para comitente ${numeroComitente}...`)
+              cuitLookupCount++
+
               const cuitEncontrado = await getCuitByComitente(numeroComitente)
               if (cuitEncontrado) {
                 cuit = cuitEncontrado
-                cuitLookupCount++
+                cuitFoundCount++
                 console.log(`✅ CUIT encontrado: ${cuit}`)
               } else {
                 console.warn(`❌ No se encontró CUIT para comitente ${numeroComitente}`)
                 cuit = "00000000000" // CUIT por defecto
               }
+            } else {
+              console.log(`✅ CUIT ya informado: ${cuit}`)
             }
 
             newEchecks.push({
@@ -252,6 +274,8 @@ export default function BankFileProcessor() {
         for (let index = 0; index < dataLines.length; index++) {
           const line = dataLines[index]
           const parts = line.split("\t").map((part) => part.trim())
+
+          console.log(`📋 Procesando línea ${index + 1}:`, parts)
 
           if (parts.length >= 11 && parts[10] === "Aprobada" && parts[8] === "-1") {
             // Limpiar el importe (remover puntos de miles y reemplazar coma por punto)
@@ -272,18 +296,24 @@ export default function BankFileProcessor() {
             let cuit = parts[6] || "" // CUIT del campo correspondiente
             const numeroComitente = parts[1] // Comitente (Número)
 
+            console.log(`🔍 Procesando comitente ${numeroComitente}, CUIT original: "${cuit}"`)
+
             // Si no hay CUIT, buscar por número de comitente
-            if (!cuit || cuit.trim() === "") {
-              console.log(`Buscando CUIT para comitente ${numeroComitente}...`)
+            if (!cuit || cuit.trim() === "" || cuit === "0") {
+              console.log(`🔍 Buscando CUIT para comitente ${numeroComitente}...`)
+              cuitLookupCount++
+
               const cuitEncontrado = await getCuitByComitente(numeroComitente)
               if (cuitEncontrado) {
                 cuit = cuitEncontrado
-                cuitLookupCount++
+                cuitFoundCount++
                 console.log(`✅ CUIT encontrado: ${cuit}`)
               } else {
                 console.warn(`❌ No se encontró CUIT para comitente ${numeroComitente}`)
                 cuit = "00000000000" // CUIT por defecto
               }
+            } else {
+              console.log(`✅ CUIT ya informado: ${cuit}`)
             }
 
             newEchecks.push({
@@ -299,6 +329,11 @@ export default function BankFileProcessor() {
         }
       }
 
+      console.log(`📊 Resumen del procesamiento:`)
+      console.log(`- E-checks procesados: ${newEchecks.length}`)
+      console.log(`- Búsquedas de CUIT realizadas: ${cuitLookupCount}`)
+      console.log(`- CUITs encontrados: ${cuitFoundCount}`)
+
       setEcheckEntries((prev) => [...prev, ...newEchecks])
       setBulkEcheckText("")
       setBulkEcheckFormat("")
@@ -306,9 +341,10 @@ export default function BankFileProcessor() {
 
       toast({
         title: "E-checks procesados",
-        description: `Se agregaron ${newEchecks.length} e-checks. ${cuitLookupCount > 0 ? `Se buscaron ${cuitLookupCount} CUITs por número de comitente.` : ""}`,
+        description: `Se agregaron ${newEchecks.length} e-checks. Búsquedas: ${cuitLookupCount}, Encontrados: ${cuitFoundCount}`,
       })
     } catch (error) {
+      console.error("❌ Error al procesar e-checks:", error)
       toast({
         title: "Error al procesar",
         description:
@@ -385,9 +421,17 @@ export default function BankFileProcessor() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Procesador de Archivos Bancarios</h1>
-        <p className="text-gray-600">Genera archivos de transferencias y e-checks para diferentes bancos</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Procesador de Archivos Bancarios</h1>
+          <p className="text-gray-600">Genera archivos de transferencias y e-checks para diferentes bancos</p>
+        </div>
+
+        {/* Botón de debug */}
+        <Button variant="outline" onClick={handleDebugCache} className="bg-yellow-50 text-yellow-700 border-yellow-200">
+          <Bug className="w-4 h-4 mr-2" />
+          Debug Cache
+        </Button>
       </div>
 
       {/* Selección de Banco y Tipo de Archivo */}
@@ -686,7 +730,8 @@ export default function BankFileProcessor() {
                         </div>
                         <p className="text-blue-600 text-sm mt-1">
                           Si no se informa CUIT en los datos, el sistema buscará automáticamente usando el número de
-                          comitente en la base de datos.
+                          comitente en la base de datos. Usa el botón "Debug Cache" para verificar que los datos estén
+                          cargados.
                         </p>
                       </div>
 
@@ -729,8 +774,8 @@ export default function BankFileProcessor() {
                             onChange={(e) => setBulkEcheckText(e.target.value)}
                             placeholder={
                               bulkEcheckFormat === "ordenes-pago"
-                                ? "Estado\tComitente (Número)\tComitente (Denominación)\tMoneda (Descripción)\tImporte\tComitente (CUIT)\tModalidad de Pago\tOficial de Cuenta\nLiquidada\t1358\tTRANSPORTADORA DE GAS DEL SUR S.A.\tPesos\t5477538085\t30657862068\tEcheq\tSORUCO, JAVIER"
-                                : "Fecha de Concertación\tComitente (Número)\tComitente (Descripción)\tMoneda\tImporte\tCBU\tCUIT\tBanco\tForma de Pago (Echeq)\tNúmero de Referencia\tEstado\tForma de Pago (Descripción)\tHora de Ingreso\n4/6/2025\t153709\tCONTEXTO ECONOMICO SRL\tPesos\t35701343,4\t\t\t\t-1\t#19914504\tAprobada\tBanco Comafi S.A. $\t4/6/2025"
+                                ? "Estado\tComitente (Número)\tComitente (Denominación)\tMoneda (Descripción)\tImporte\tComitente (CUIT)\tModalidad de Pago\tOficial de Cuenta\nLiquidada\t52863\tGEO CONSTRUCCIONES S.A.\tPesos\t5477538085\t\tEcheq\tSORUCO, JAVIER"
+                                : "Fecha de Concertación\tComitente (Número)\tComitente (Descripción)\tMoneda\tImporte\tCBU\tCUIT\tBanco\tForma de Pago (Echeq)\tNúmero de Referencia\tEstado\tForma de Pago (Descripción)\tHora de Ingreso\n4/6/2025\t52863\tGEO CONSTRUCCIONES S.A.\tPesos\t35701343,4\t\t\t\t-1\t#19914504\tAprobada\tBanco Comafi S.A. $\t4/6/2025"
                             }
                             rows={12}
                             className="font-mono text-sm"
@@ -786,6 +831,11 @@ export default function BankFileProcessor() {
                                   Auto
                                 </Badge>
                               )}
+                              {entry.cuitBeneficiario === "00000000000" && (
+                                <Badge variant="destructive" className="text-xs">
+                                  No encontrado
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>{formatNumber(entry.importe)}</TableCell>
@@ -819,6 +869,9 @@ export default function BankFileProcessor() {
                       <Search className="w-3 h-3 mr-1" />
                       {echeckEntries.filter((e) => e.numeroComitente && e.cuitBeneficiario !== "00000000000").length}{" "}
                       CUITs encontrados
+                    </Badge>
+                    <Badge variant="destructive" className="text-xs">
+                      {echeckEntries.filter((e) => e.cuitBeneficiario === "00000000000").length} sin CUIT
                     </Badge>
                   </div>
                   <div className="flex gap-2">
