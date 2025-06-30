@@ -237,7 +237,7 @@ export default function BankFileProcessor() {
 
           console.log(`📋 Procesando línea ${index + 1}:`, parts)
 
-          if (parts.length >= 6 && parts[0] === "Liquidada" && parts[6] === "Echeq") {
+          if (parts.length >= 6 && parts[0] === "Pendiente de Liquidación" && parts[6] === "Echeq") {
             // Limpiar el importe (remover puntos de miles y reemplazar coma por punto)
             const importeStr = parts[4].replace(/\./g, "").replace(",", ".")
             const importe = Number.parseFloat(importeStr) || 0
