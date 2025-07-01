@@ -188,7 +188,8 @@ export default function FundProcessor() {
     const reader = new FileReader()
     reader.onload = (e) => {
       const content = e.target?.result as string
-      const lines = content.split(/\r?\n/).filter(line => line.trim());
+      const lines = content.split(/\r?\n|\r/).filter((line) => line.trim())
+
 
       const newTransactions: Transaction[] = lines
         .map((line, index) => {
