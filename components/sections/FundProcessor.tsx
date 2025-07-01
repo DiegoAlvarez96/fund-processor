@@ -26,132 +26,131 @@ interface Transaction {
   status?: "pending" | "success" | "error"
 }
 
-
 const FCI_DICT: Record<string, string> = {
-    "1":"PY FCI A",
-    "2":"PY FCI B",
-    "3":"PY FCI C",
-    "4":"AAA FCI A",
-    "5":"AAA FCI B",
-    "6":"DINA FCI A",
-    "7":"DINA FCI B",
-    "8":"DINA FCI C",
-    "9":"AP FCI A",
-    "10":"AP FCI B",
-    "11":"AP FCI C",
-    "12":"AP FCI H",
-    "13":"AP FCI I",
-    "17":"RP FCI A",
-    "18":"RP FCI B",
-    "19":"BAL4 FCI A",
-    "20":"BAL4 FCI B",
-    "21":"BAL4 FCI C",
-    "22":"BAL5 FCI A",
-    "23":"BAL5 FCI B",
-    "24":"BAL5 FCI C",
-    "25":"BAL6 FCI A",
-    "26":"BAL6 FCI B",
-    "27":"BAL6 FCI C",
-    "28":"MUL FCI A",
-    "28":"BAL7 FCI A",
-    "29":"MUL FCI B",
-    "29":"BAL7 FCI B",
-    "30":"MUL FCI C",
-    "30":"BAL7 FCI C",
-    "31":"BAL8 FCI A",
-    "32":"BAL8 FCI B",
-    "34":"BAL10 FCI A",
-    "35":"BAL10 FCI B",
-    "36":"BAL10 FCI C",
-    "37":"WISE FCI A",
-    "38":"WISE FCI B",
-    "39":"WISE FCI C",
-    "40":"BAL12 FCI A",
-    "41":"BAL12 FCI B",
-    "42":"BAL12 FCI C",
-    "43":"BAL2 FCI A",
-    "44":"BAL2 FCI B",
-    "45":"BAL2 FCI C",
-    "46":"INFRA FCI A",
-    "47":"INFRA FCI B",
-    "48":"INFRA FCI C",
-    "49":"INFRA FCI G",
-    "50":"RT FCI A",
-    "51":"RT FCI B",
-    "52":"RT FCI C",
-    "53":"PP FCI A",
-    "54":"PP FCI B",
-    "55":"PP FCI C",
-    "56":"GL FCI D",
-    "57":"GL FCI E",
-    "58":"GL FCI F",
-    "59":"RF FCI A",
-    "60":"RF FCI B",
-    "61":"RF FCI C",
-    "62":"SYC FCI A",
-    "63":"SYC FCI B",
-    "64":"SYC FCI C",
-    "65":"ASG FCI A",
-    "66":"ASG FCI B",
-    "67":"ASG FCI C",
-    "68":"AWCG FCI A",
-    "69":"AWCG FCI B",
-    "70":"AWCG FCI C",
-    "71":"AWCH FCI A",
-    "72":"AWCH FCI B",
-    "73":"AWCH FCI C",
-    "74":"BAL16 FCI A",
-    "75":"BAL16 FCI B",
-    "76":"BAL16 FCI C",
-    "77":"MUA FCI A",
-    "78":"MUA FCI B",
-    "79":"MUA FCI C",
-    "80":"AD FCI D",
-    "81":"AD FCI C",
-    "82":"AD FCI E",
-    "83":"IOLDP FCI D",
-    "83":"IOLDP FCI D",
-    "84":"AP FCI H1",
-    "85":"BAL17 FCI A",
-    "86":"BAL17 FCI B",
-    "87":"BAL7 FCI B",
-    "88":"BAL20 FCI A",
-    "89":"BAL20 FCI B",
-    "90":"BAL20 FCI C",
-    "91":"BAL9 FCI A",
-    "92":"BAL9 FCI B",
-    "93":"BAL9 FCI C",
-    "95":"RF FCI CERA",
-    "96":"PY FCI CERA",
-    "97":"RT FCI CERA",
-    "98":"AAA FCI CERA",
-    "99":"PP FCI CERA",
-    "100":"GL FCI CERA",
-    "101":"AP FCI CERA",
-    "102":"BAL2 FCI CERA",
-    "103":"DINA FCI CERA",
-    "104":"BAL16 FCI CERA",
-    "105":"BAL9 FCI CERA",
-    "106":"MUA FCI CERA",
-    "107":"BAL12 FCI CERA",
-    "108":"BAL6 FCI CERA",
-    "109":"BAL20 FCI CERA",
-    "110":"BAL10 FCI CERA",
-    "111":"AWCG FCI CERA",
-    "112":"MUL FCI CERA",
-    "113":"BAL15 FCI CERA",
-    "114":"AD FCI CERA",
-    "115":"BAL13 FCI A",
-    "116":"BAL13 FCI B",
-    "117":"BAL13 FCI C",
-    "118":"IOLDP FCI E",
-    "119":"IOLDP FCI F",
-    "120":"IOLDP FCI CERA",
-    "121":"ALYP FCI A",
-    "122":"ALYP FCI C",
-    "123":"ALYP FCI B",
-    "138":"BAL15 FCI A",
-    "139":"BAL15 FCI B"
+  "1": "PY FCI A",
+  "2": "PY FCI B",
+  "3": "PY FCI C",
+  "4": "AAA FCI A",
+  "5": "AAA FCI B",
+  "6": "DINA FCI A",
+  "7": "DINA FCI B",
+  "8": "DINA FCI C",
+  "9": "AP FCI A",
+  "10": "AP FCI B",
+  "11": "AP FCI C",
+  "12": "AP FCI H",
+  "13": "AP FCI I",
+  "17": "RP FCI A",
+  "18": "RP FCI B",
+  "19": "BAL4 FCI A",
+  "20": "BAL4 FCI B",
+  "21": "BAL4 FCI C",
+  "22": "BAL5 FCI A",
+  "23": "BAL5 FCI B",
+  "24": "BAL5 FCI C",
+  "25": "BAL6 FCI A",
+  "26": "BAL6 FCI B",
+  "27": "BAL6 FCI C",
+  "28": "MUL FCI A",
+  "28": "BAL7 FCI A",
+  "29": "MUL FCI B",
+  "29": "BAL7 FCI B",
+  "30": "MUL FCI C",
+  "30": "BAL7 FCI C",
+  "31": "BAL8 FCI A",
+  "32": "BAL8 FCI B",
+  "34": "BAL10 FCI A",
+  "35": "BAL10 FCI B",
+  "36": "BAL10 FCI C",
+  "37": "WISE FCI A",
+  "38": "WISE FCI B",
+  "39": "WISE FCI C",
+  "40": "BAL12 FCI A",
+  "41": "BAL12 FCI B",
+  "42": "BAL12 FCI C",
+  "43": "BAL2 FCI A",
+  "44": "BAL2 FCI B",
+  "45": "BAL2 FCI C",
+  "46": "INFRA FCI A",
+  "47": "INFRA FCI B",
+  "48": "INFRA FCI C",
+  "49": "INFRA FCI G",
+  "50": "RT FCI A",
+  "51": "RT FCI B",
+  "52": "RT FCI C",
+  "53": "PP FCI A",
+  "54": "PP FCI B",
+  "55": "PP FCI C",
+  "56": "GL FCI D",
+  "57": "GL FCI E",
+  "58": "GL FCI F",
+  "59": "RF FCI A",
+  "60": "RF FCI B",
+  "61": "RF FCI C",
+  "62": "SYC FCI A",
+  "63": "SYC FCI B",
+  "64": "SYC FCI C",
+  "65": "ASG FCI A",
+  "66": "ASG FCI B",
+  "67": "ASG FCI C",
+  "68": "AWCG FCI A",
+  "69": "AWCG FCI B",
+  "70": "AWCG FCI C",
+  "71": "AWCH FCI A",
+  "72": "AWCH FCI B",
+  "73": "AWCH FCI C",
+  "74": "BAL16 FCI A",
+  "75": "BAL16 FCI B",
+  "76": "BAL16 FCI C",
+  "77": "MUA FCI A",
+  "78": "MUA FCI B",
+  "79": "MUA FCI C",
+  "80": "AD FCI D",
+  "81": "AD FCI C",
+  "82": "AD FCI E",
+  "83": "IOLDP FCI D",
+  "83": "IOLDP FCI D",
+  "84": "AP FCI H1",
+  "85": "BAL17 FCI A",
+  "86": "BAL17 FCI B",
+  "87": "BAL7 FCI B",
+  "88": "BAL20 FCI A",
+  "89": "BAL20 FCI B",
+  "90": "BAL20 FCI C",
+  "91": "BAL9 FCI A",
+  "92": "BAL9 FCI B",
+  "93": "BAL9 FCI C",
+  "95": "RF FCI CERA",
+  "96": "PY FCI CERA",
+  "97": "RT FCI CERA",
+  "98": "AAA FCI CERA",
+  "99": "PP FCI CERA",
+  "100": "GL FCI CERA",
+  "101": "AP FCI CERA",
+  "102": "BAL2 FCI CERA",
+  "103": "DINA FCI CERA",
+  "104": "BAL16 FCI CERA",
+  "105": "BAL9 FCI CERA",
+  "106": "MUA FCI CERA",
+  "107": "BAL12 FCI CERA",
+  "108": "BAL6 FCI CERA",
+  "109": "BAL20 FCI CERA",
+  "110": "BAL10 FCI CERA",
+  "111": "AWCG FCI CERA",
+  "112": "MUL FCI CERA",
+  "113": "BAL15 FCI CERA",
+  "114": "AD FCI CERA",
+  "115": "BAL13 FCI A",
+  "116": "BAL13 FCI B",
+  "117": "BAL13 FCI C",
+  "118": "IOLDP FCI E",
+  "119": "IOLDP FCI F",
+  "120": "IOLDP FCI CERA",
+  "121": "ALYP FCI A",
+  "122": "ALYP FCI C",
+  "123": "ALYP FCI B",
+  "138": "BAL15 FCI A",
+  "139": "BAL15 FCI B",
 }
 
 const USERS = ["adcap", "adcap_99", "adcap_1000"]
@@ -185,40 +184,83 @@ export default function FundProcessor() {
     const file = event.target.files?.[0]
     if (!file) return
 
+    console.log("📁 Archivo seleccionado:", file.name, "Tamaño:", file.size, "bytes")
+
     const reader = new FileReader()
     reader.onload = (e) => {
       const content = e.target?.result as string
-      const lines = content.split(/\r?\n|\r/).filter((line) => line.trim())
+      console.log("📄 Contenido del archivo:")
+      console.log("Longitud total:", content.length)
+      console.log("Primeros 200 caracteres:", content.substring(0, 200))
 
+      // Dividir por diferentes tipos de salto de línea
+      const lines = content.split(/\r\n|\r|\n/).filter((line) => line.trim())
 
-      const newTransactions: Transaction[] = lines
-        .map((line, index) => {
-          const parts = line.split(";")
-          if (parts.length >= 5) {
-            const [cuotapartista, tipo, fci, importe, cantidad, fechaConcertacion = "", fechaLiquidacion = ""] = parts
-            return {
-              id: `${Date.now()}-${index}`,
-              cuotapartista,
-              tipo: tipo as "SUSC" | "RESC",
-              fci,
-              importe,
-              cantidad,
-              fechaConcertacion,
-              fechaLiquidacion,
-              status: "pending",
-            }
+      console.log("📊 Total de líneas encontradas:", lines.length)
+      console.log("📋 Primeras 5 líneas:", lines.slice(0, 5))
+
+      const newTransactions: Transaction[] = []
+
+      lines.forEach((line, index) => {
+        const trimmedLine = line.trim()
+        if (!trimmedLine) {
+          console.log(`⚠️ Línea ${index + 1} está vacía, saltando...`)
+          return
+        }
+
+        console.log(`📋 Procesando línea ${index + 1}: "${trimmedLine}"`)
+
+        const parts = trimmedLine.split(";")
+        console.log(`📋 Partes encontradas en línea ${index + 1}:`, parts)
+
+        if (parts.length >= 5) {
+          const [cuotapartista, tipo, fci, importe, cantidad, fechaConcertacion = "", fechaLiquidacion = ""] = parts
+
+          // Validar que el tipo sea válido
+          if (tipo !== "SUSC" && tipo !== "RESC") {
+            console.warn(`⚠️ Línea ${index + 1}: Tipo "${tipo}" no válido, saltando...`)
+            return
           }
-          return null
-        })
-        .filter(Boolean) as Transaction[]
+
+          const transaction: Transaction = {
+            id: `${Date.now()}-${index}`,
+            cuotapartista: cuotapartista.trim(),
+            tipo: tipo.trim() as "SUSC" | "RESC",
+            fci: fci.trim(),
+            importe: importe.trim(),
+            cantidad: cantidad.trim(),
+            fechaConcertacion: fechaConcertacion.trim(),
+            fechaLiquidacion: fechaLiquidacion.trim(),
+            status: "pending",
+          }
+
+          console.log(`✅ Transacción ${index + 1} creada:`, transaction)
+          newTransactions.push(transaction)
+        } else {
+          console.warn(`⚠️ Línea ${index + 1} tiene ${parts.length} partes, esperadas al menos 5:`, parts)
+        }
+      })
+
+      console.log(`✅ Total transacciones procesadas: ${newTransactions.length}`)
 
       setTransactions(newTransactions)
       toast({
         title: "Archivo cargado",
-        description: `Se cargaron ${newTransactions.length} transacciones`,
+        description: `Se cargaron ${newTransactions.length} transacciones de ${lines.length} líneas`,
       })
     }
-    reader.readAsText(file)
+
+    reader.onerror = (error) => {
+      console.error("❌ Error al leer archivo:", error)
+      toast({
+        title: "Error al leer archivo",
+        description: "No se pudo leer el archivo. Verifique que sea un archivo de texto válido.",
+        variant: "destructive",
+      })
+    }
+
+    // Leer como texto con encoding UTF-8
+    reader.readAsText(file, "UTF-8")
   }
 
   const processTransactions = async (transactionIds?: string[]) => {
@@ -388,8 +430,8 @@ export default function FundProcessor() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Procesador de Fondos VF</h1>
-        <p className="text-gray-600">Gestiona suscripciones y rescates en Visual Fondos</p>
+        <h1 className="text-3xl font-bold text-gray-900">Procesador de Fondos de Inversión</h1>
+        <p className="text-gray-600">Gestiona suscripciones y rescates de fondos de inversión</p>
       </div>
 
       <Card>
