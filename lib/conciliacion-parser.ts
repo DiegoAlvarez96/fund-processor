@@ -11,6 +11,9 @@ import type {
 } from "./conciliacion-types"
 import { getCuitByComitente } from "./comitente-lookup"
 
+// Cache para CUITs ya buscados
+const cuitCache = new Map<string, string>()
+
 // Función para limpiar CUIT (eliminar guiones)
 function limpiarCuit(cuit: string): string {
   return cuit?.toString().replace(/[-\s]/g, "") || ""
@@ -139,6 +142,70 @@ function buscarColumna(headers: string[], nombres: string[]): number {
   return -1
 }
 
+// Función optimizada para buscar CUIT con cache y lotes
+async function buscarCuitOptimizado(
+  comitenteNumero: string,
+  onProgress?: (current: number, total: number, message: string) => void,
+): Promise<string> {
+  // Verificar cache primero
+  if (cuitCache.has(comitenteNumero)) {
+    return cuitCache.get(comitenteNumero) || ""
+  }
+
+  try {
+    const cuitEncontrado = await getCuitByComitente(comitenteNumero)
+    if (cuitEncontrado) {
+      cuitCache.set(comitenteNumero, cuitEncontrado)
+      return cuitEncontrado
+    }
+  } catch (error) {
+    console.warn(`⚠️ Error buscando CUIT para comitente ${comitenteNumero}:`, error)
+  }
+
+  return ""
+}
+
+// Función para procesar CUITs en lotes con delay
+async function procesarCuitsEnLotes<T extends { comitenteNumero: string; cuit: string }>(
+  registros: T[],
+  onProgress?: (current: number, total: number, message: string) => void,
+): Promise<void> {
+  const registrosSinCuit = registros.filter((r) => !r.cuit && r.comitenteNumero)
+
+  if (registrosSinCuit.length === 0) return
+
+  console.log(`🔍 Buscando CUITs para ${registrosSinCuit.length} registros...`)
+
+  const LOTE_SIZE = 10 // Procesar de a 10 registros
+  const DELAY_MS = 100 // Delay entre lotes para no saturar
+
+  for (let i = 0; i < registrosSinCuit.length; i += LOTE_SIZE) {
+    const lote = registrosSinCuit.slice(i, i + LOTE_SIZE)
+
+    // Procesar lote en paralelo
+    const promesas = lote.map(async (registro, index) => {
+      const globalIndex = i + index + 1
+
+      if (onProgress) {
+        onProgress(globalIndex, registrosSinCuit.length, `Buscando CUIT para comitente ${registro.comitenteNumero}`)
+      }
+
+      const cuitEncontrado = await buscarCuitOptimizado(registro.comitenteNumero)
+      if (cuitEncontrado) {
+        registro.cuit = cuitEncontrado
+        console.log(`✅ CUIT encontrado para comitente ${registro.comitenteNumero}: ${cuitEncontrado}`)
+      }
+    })
+
+    await Promise.all(promesas)
+
+    // Delay entre lotes para no saturar el sistema
+    if (i + LOTE_SIZE < registrosSinCuit.length) {
+      await new Promise((resolve) => setTimeout(resolve, DELAY_MS))
+    }
+  }
+}
+
 // Parser para Status Órdenes de Pago
 export async function parseStatusOrdenesPago(
   file: File,
@@ -207,7 +274,6 @@ export async function parseStatusOrdenesPago(
         })
 
         // Primera pasada: procesar todos los registros
-        const totalFilas = jsonData.length - headerRow - 1
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
@@ -240,27 +306,8 @@ export async function parseStatusOrdenesPago(
           }
         }
 
-        // Segunda pasada: buscar CUITs faltantes
-        const registrosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
-        console.log(`🔍 Buscando CUITs para ${registrosSinCuit.length} registros sin CUIT...`)
-
-        for (let i = 0; i < registrosSinCuit.length; i++) {
-          const registro = registrosSinCuit[i]
-
-          if (onProgress) {
-            onProgress(i + 1, registrosSinCuit.length, `Buscando CUIT para comitente ${registro.comitenteNumero}`)
-          }
-
-          try {
-            const cuitEncontrado = await getCuitByComitente(registro.comitenteNumero)
-            if (cuitEncontrado) {
-              registro.cuit = cuitEncontrado
-              console.log(`✅ CUIT encontrado para comitente ${registro.comitenteNumero}: ${cuitEncontrado}`)
-            }
-          } catch (error) {
-            console.warn(`⚠️ Error buscando CUIT para comitente ${registro.comitenteNumero}:`, error)
-          }
-        }
+        // Segunda pasada: buscar CUITs faltantes de forma optimizada
+        await procesarCuitsEnLotes(resultados, onProgress)
 
         console.log(`✅ Status Órdenes de Pago procesadas: ${resultados.length}`)
         resolve(resultados)
@@ -476,27 +523,8 @@ export async function parseRecibosPago(
           }
         }
 
-        // Segunda pasada: buscar CUITs faltantes
-        const recibosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
-        console.log(`🔍 Buscando CUITs para ${recibosSinCuit.length} recibos sin CUIT...`)
-
-        for (let i = 0; i < recibosSinCuit.length; i++) {
-          const recibo = recibosSinCuit[i]
-
-          if (onProgress) {
-            onProgress(i + 1, recibosSinCuit.length, `Buscando CUIT para recibo comitente ${recibo.comitenteNumero}`)
-          }
-
-          try {
-            const cuitEncontrado = await getCuitByComitente(recibo.comitenteNumero)
-            if (cuitEncontrado) {
-              recibo.cuit = cuitEncontrado
-              console.log(`✅ CUIT encontrado para recibo comitente ${recibo.comitenteNumero}: ${cuitEncontrado}`)
-            }
-          } catch (error) {
-            console.warn(`⚠️ Error buscando CUIT para recibo comitente ${recibo.comitenteNumero}:`, error)
-          }
-        }
+        // Segunda pasada: buscar CUITs faltantes de forma optimizada
+        await procesarCuitsEnLotes(resultados, onProgress)
 
         console.log(`✅ Recibos de Pago procesados: ${resultados.length}`)
         resolve(resultados)
@@ -620,18 +648,33 @@ export async function parseMovimientosBancarios(file: File): Promise<{
               })
             }
 
-            // Para mercados, incluir tanto C como D si es BYMA
-            if (beneficiario.includes("BYMA S.A. BOLSAS Y MERCADOS AR") && cuit === "30711610126") {
-              mercados.push({
-                id: `mercado-${Date.now()}-${i}`,
-                fecha,
-                beneficiario,
-                cuit,
-                dc,
-                importe,
-                moneda,
-                datosOriginales,
-              })
+            // Para transferencias monetarias y mercados, incluir tanto C como D
+            if (cuit === "30711610126") {
+              // Si no es BYMA, es transferencia monetaria
+              if (!beneficiario.includes("BYMA S.A. BOLSAS Y MERCADOS AR")) {
+                transferencias.push({
+                  id: `transferencia-${Date.now()}-${i}`,
+                  fecha,
+                  beneficiario,
+                  cuit,
+                  dc,
+                  importe,
+                  moneda,
+                  datosOriginales,
+                })
+              } else {
+                // Si es BYMA, es mercado
+                mercados.push({
+                  id: `mercado-${Date.now()}-${i}`,
+                  fecha,
+                  beneficiario,
+                  cuit,
+                  dc,
+                  importe,
+                  moneda,
+                  datosOriginales,
+                })
+              }
             }
           } catch (error) {
             console.error(`Error procesando fila ${i} de Movimientos:`, error)
