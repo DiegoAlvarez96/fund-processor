@@ -71,70 +71,163 @@ function formatearNumero(numero: number): string {
   })
 }
 
-// Función para crear hoja de resumen
-function crearHojaResumen(resumen: ResumenConciliacion): any[][] {
+// Función para crear hoja de resumen con diseño profesional
+function crearHojaResumen(resumen: ResumenConciliacion, resultado: ResultadoConciliacion): any[][] {
+  const porcentajeSolicitudes = ((resumen.solicitudes.conciliados / resumen.solicitudes.cantidad) * 100).toFixed(1)
+  const porcentajeRecibos = ((resumen.recibos.conciliados / resumen.recibos.cantidad) * 100).toFixed(1)
+  const porcentajeMovimientos = ((resumen.movimientos.conciliados / resumen.movimientos.cantidad) * 100).toFixed(1)
+
   return [
-    ["TABLERO DE CONCILIACIÓN TR VALO", "", "", "", "", ""],
-    ["", "", "", "", "", ""],
-    ["RESUMEN GENERAL", "", "", "", "", ""],
-    ["", "Cantidad", "Importe Total", "Conciliados", "No Conciliados", "% Conciliación"],
+    // Título principal
+    ["TABLERO DE CONCILIACIÓN TR VALO", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+
+    // Sección de resumen general con colores
+    ["RESUMEN GENERAL", "", "", "ANÁLISIS COMPARATIVO", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+
+    // Headers con estilo
+    ["Tipo de Archivo", "Cantidad", "Importe Total", "Conciliados", "No Conciliados", "% Éxito", "", ""],
+
+    // Datos de solicitudes
     [
       "Solicitudes de Pago",
       resumen.solicitudes.cantidad,
       formatearNumero(resumen.solicitudes.importeTotal),
       resumen.solicitudes.conciliados,
       resumen.solicitudes.noConciliados,
-      `${((resumen.solicitudes.conciliados / resumen.solicitudes.cantidad) * 100).toFixed(1)}%`,
+      `${porcentajeSolicitudes}%`,
+      "",
+      "",
     ],
+
+    // Datos de recibos
     [
       "Recibos de Pago",
       resumen.recibos.cantidad,
       formatearNumero(resumen.recibos.importeTotal),
       resumen.recibos.conciliados,
       resumen.recibos.noConciliados,
-      `${((resumen.recibos.conciliados / resumen.recibos.cantidad) * 100).toFixed(1)}%`,
+      `${porcentajeRecibos}%`,
+      "",
+      "",
     ],
+
+    // Datos de movimientos
     [
       "Movimientos Bancarios",
       resumen.movimientos.cantidad,
       formatearNumero(resumen.movimientos.importeTotal),
       resumen.movimientos.conciliados,
       resumen.movimientos.noConciliados,
-      `${((resumen.movimientos.conciliados / resumen.movimientos.cantidad) * 100).toFixed(1)}%`,
+      `${porcentajeMovimientos}%`,
+      "",
+      "",
     ],
-    ["", "", "", "", "", ""],
-    ["ANÁLISIS DE DIFERENCIAS", "", "", "", "", ""],
-    ["", "Diferencia Cantidad", "Diferencia Importe", "", "", ""],
+
+    ["", "", "", "", "", "", "", ""],
+
+    // Sección de diferencias
+    ["ANÁLISIS DE DIFERENCIAS", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+    ["Comparación", "Dif. Cantidad", "Dif. Importe", "Estado", "", "", "", ""],
+
     [
       "Solicitudes vs Recibos",
       resumen.diferencias.solicitudesVsRecibos.cantidad,
       formatearNumero(resumen.diferencias.solicitudesVsRecibos.importe),
+      resumen.diferencias.solicitudesVsRecibos.cantidad === 0 ? "✓ Equilibrado" : "⚠ Diferencia",
+      "",
       "",
       "",
       "",
     ],
+
     [
       "Solicitudes vs Movimientos",
       resumen.diferencias.solicitudesVsMovimientos.cantidad,
       formatearNumero(resumen.diferencias.solicitudesVsMovimientos.importe),
+      resumen.diferencias.solicitudesVsMovimientos.cantidad === 0 ? "✓ Equilibrado" : "⚠ Diferencia",
+      "",
       "",
       "",
       "",
     ],
+
     [
       "Recibos vs Movimientos",
       resumen.diferencias.recibosVsMovimientos.cantidad,
       formatearNumero(resumen.diferencias.recibosVsMovimientos.importe),
+      resumen.diferencias.recibosVsMovimientos.cantidad === 0 ? "✓ Equilibrado" : "⚠ Diferencia",
+      "",
       "",
       "",
       "",
     ],
-    ["", "", "", "", "", ""],
-    ["ESTADÍSTICAS ADICIONALES", "", "", "", "", ""],
-    ["Total Transferencias Monetarias", "", "", "", "", ""],
-    ["Total Movimientos Mercados", "", "", "", "", ""],
-    ["", "", "", "", "", ""],
-    [`Generado: ${new Date().toLocaleString("es-AR")}`, "", "", "", "", ""],
+
+    ["", "", "", "", "", "", "", ""],
+
+    // Estadísticas adicionales
+    ["ESTADÍSTICAS ADICIONALES", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+    ["Concepto", "Cantidad", "Observaciones", "", "", "", "", ""],
+
+    [
+      "Transferencias Monetarias",
+      resultado.transferenciasMonetarias.length,
+      "CUIT: 30711610126 (No mercados)",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+
+    [
+      "Movimientos de Mercados",
+      resultado.movimientosMercados.length,
+      "BYMA, MAV, MAE, MATBA ROFEX",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+
+    ["", "", "", "", "", "", "", ""],
+
+    // Indicadores de rendimiento
+    ["INDICADORES DE RENDIMIENTO", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+
+    [
+      "Eficiencia General",
+      `${((resultado.estadisticas.conciliadosCompletos / resultado.estadisticas.totalSolicitudes) * 100).toFixed(1)}%`,
+      resultado.estadisticas.conciliadosCompletos > resultado.estadisticas.noConciliados ? "✓ Excelente" : "⚠ Revisar",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+
+    [
+      "Total Procesado",
+      resultado.estadisticas.totalSolicitudes +
+        resultado.estadisticas.totalRecibos +
+        resultado.estadisticas.totalMovimientos,
+      "Registros totales",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+
+    ["", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", ""],
+    [`Generado: ${new Date().toLocaleString("es-AR")}`, "", "", "", "", "", "", ""],
+    ["Sistema de Conciliación TR VALO v1.0", "", "", "", "", "", "", ""],
   ]
 }
 
@@ -244,83 +337,13 @@ export function exportarConciliacionExcel(resultado: ResultadoConciliacion): voi
     // Crear workbook
     const workbook = XLSX.utils.book_new()
 
-    // Crear hoja de resumen
-    const hojaResumen = crearHojaResumen(resumen)
+    // Crear hoja de resumen con diseño mejorado
+    const hojaResumen = crearHojaResumen(resumen, resultado)
     const wsResumen = XLSX.utils.aoa_to_sheet(hojaResumen)
 
-    // Aplicar estilos a la hoja de resumen
-    wsResumen["!cols"] = [{ width: 25 }, { width: 15 }, { width: 20 }, { width: 15 }, { width: 15 }, { width: 15 }]
-
-    // Crear hojas de detalle
-    const hojaSolicitudes = crearHojaSolicitudes(resultado.solicitudesPago)
-    const wsSolicitudes = XLSX.utils.aoa_to_sheet(hojaSolicitudes)
-
-    const hojaRecibos = crearHojaRecibos(resultado.recibosPago)
-    const wsRecibos = XLSX.utils.aoa_to_sheet(hojaRecibos)
-
-    const hojaMovimientos = crearHojaMovimientos(resultado.movimientosBancarios)
-    const wsMovimientos = XLSX.utils.aoa_to_sheet(hojaMovimientos)
-
-    // Agregar hojas al workbook
-    XLSX.utils.book_append_sheet(workbook, wsResumen, "📊 Tablero Resumen")
-    XLSX.utils.book_append_sheet(workbook, wsSolicitudes, "📋 Solicitudes Detalle")
-    XLSX.utils.book_append_sheet(workbook, wsRecibos, "🧾 Recibos Detalle")
-    XLSX.utils.book_append_sheet(workbook, wsMovimientos, "🏦 Movimientos Detalle")
-
-    // Si hay transferencias monetarias, agregar hoja
-    if (resultado.transferenciasMonetarias.length > 0) {
-      const hojaTransferencias = resultado.transferenciasMonetarias.map((t) => [
-        t.id,
-        t.fecha,
-        t.beneficiario,
-        t.cuit,
-        t.dc,
-        t.importe,
-        t.moneda,
-      ])
-      const headersTransferencias = ["ID", "Fecha", "Beneficiario", "CUIT", "D/C", "Importe", "Moneda"]
-      const wsTransferencias = XLSX.utils.aoa_to_sheet([headersTransferencias, ...hojaTransferencias])
-      XLSX.utils.book_append_sheet(workbook, wsTransferencias, "💰 Transferencias")
-    }
-
-    // Si hay movimientos de mercados, agregar hoja
-    if (resultado.movimientosMercados.length > 0) {
-      const hojaMercados = resultado.movimientosMercados.map((m) => [
-        m.id,
-        m.fecha,
-        m.beneficiario,
-        m.cuit,
-        m.dc,
-        m.importe,
-        m.moneda,
-      ])
-      const headersMercados = ["ID", "Fecha", "Beneficiario", "CUIT", "D/C", "Importe", "Moneda"]
-      const wsMercados = XLSX.utils.aoa_to_sheet([headersMercados, ...hojaMercados])
-      XLSX.utils.book_append_sheet(workbook, wsMercados, "📈 Mercados")
-    }
-
-    // Generar nombre de archivo con timestamp
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
-    const nombreArchivo = `Conciliacion_TR_VALO_${timestamp}.xlsx`
-
-    // Serializar workbook a ArrayBuffer (modo navegador)
-    const wbarray = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
-
-    // Crear Blob y disparar descarga
-    const blob = new Blob([wbarray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
-    const url = URL.createObjectURL(blob)
-
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = nombreArchivo
-    anchor.click()
-
-    // Limpieza
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-
-    console.log(`✅ Archivo Excel generado: ${nombreArchivo}`)
-  } catch (error) {
-    console.error("❌ Error generando archivo Excel:", error)
-    throw new Error("Error al generar el archivo Excel de conciliación")
-  }
-}
+    // Aplicar estilos y anchos de columna a la hoja de resumen
+    wsResumen["!cols"] = [
+      { width: 30 }, // Tipo de Archivo
+      { width: 15 }, // Cantidad
+      { width: 20 }, // Importe Total
+      { width: 15 }, // Conc\
