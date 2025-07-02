@@ -303,8 +303,20 @@ export function exportarConciliacionExcel(resultado: ResultadoConciliacion): voi
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
     const nombreArchivo = `Conciliacion_TR_VALO_${timestamp}.xlsx`
 
-    // Descargar archivo
-    XLSX.writeFile(workbook, nombreArchivo)
+    // Serializar workbook a ArrayBuffer (modo navegador)
+    const wbarray = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
+
+    // Crear Blob y disparar descarga
+    const blob = new Blob([wbarray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = nombreArchivo
+    anchor.click()
+
+    // Limpieza
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
 
     console.log(`✅ Archivo Excel generado: ${nombreArchivo}`)
   } catch (error) {
