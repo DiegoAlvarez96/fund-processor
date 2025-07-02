@@ -19,7 +19,6 @@ import {
   detectInputFormat,
   type ProcessingProgress,
 } from "@/lib/titulos-parser"
-import { readTitulosFromExcel, validateExcelFile, detectExcelStructure } from "@/lib/titulos-excel-reader"
 import { generateAllTitulosExcel, getFileName } from "@/lib/titulos-excel"
 import { MERCADO_CONFIG } from "@/lib/titulos-config"
 import PaginatedTitulosTable from "./PaginatedTitulosTable"
@@ -40,12 +39,6 @@ export default function TitulosProcessor() {
 
   // Estados para carga de Excel
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [fileStructure, setFileStructure] = useState<{
-    hasHeaders: boolean
-    columnCount: number
-    rowCount: number
-    sampleData: string[][]
-  } | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -78,12 +71,26 @@ export default function TitulosProcessor() {
 
     console.log("📁 Archivo seleccionado:", file.name)
 
-    // Validar archivo
-    const validation = validateExcelFile(file)
-    if (!validation.valid) {
+    // Validar extensión
+    const validExtensions = [".xlsx", ".xls", ".csv"]
+    const fileName = file.name.toLowerCase()
+    const hasValidExtension = validExtensions.some((ext) => fileName.endsWith(ext))
+
+    if (!hasValidExtension) {
       toast({
         title: "Archivo no válido",
-        description: validation.error,
+        description: "Use archivos .xlsx, .xls o .csv",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Verificar tamaño (máximo 10MB)
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSize) {
+      toast({
+        title: "Archivo muy grande",
+        description: "El archivo debe ser menor a 10MB",
         variant: "destructive",
       })
       return
@@ -91,25 +98,10 @@ export default function TitulosProcessor() {
 
     setSelectedFile(file)
 
-    try {
-      // Detectar estructura del archivo
-      const structure = await detectExcelStructure(file)
-      setFileStructure(structure)
-
-      console.log("📊 Estructura detectada:", structure)
-
-      toast({
-        title: "Archivo cargado",
-        description: `${file.name} - ${structure.rowCount} filas, ${structure.columnCount} columnas`,
-      })
-    } catch (error) {
-      console.error("❌ Error analizando archivo:", error)
-      toast({
-        title: "Error al analizar archivo",
-        description: "No se pudo analizar la estructura del archivo",
-        variant: "destructive",
-      })
-    }
+    toast({
+      title: "Archivo cargado",
+      description: `${file.name} - ${(file.size / 1024).toFixed(1)} KB`,
+    })
   }
 
   // Procesar datos desde texto (método existente)
@@ -172,7 +164,7 @@ export default function TitulosProcessor() {
     }
   }, [rawData, toast])
 
-  // Procesar datos desde Excel
+  // Procesar datos desde Excel (placeholder por ahora)
   const procesarDatosExcel = useCallback(async () => {
     if (!selectedFile) {
       toast({
@@ -190,12 +182,15 @@ export default function TitulosProcessor() {
     try {
       console.log("📊 Procesando archivo Excel:", selectedFile.name)
 
+      // Importar dinámicamente la función de lectura de Excel
+      const { readTitulosFromExcel } = await import("@/lib/titulos-excel-reader")
+
       const operacionesParsed = await readTitulosFromExcel(selectedFile)
 
       if (operacionesParsed.length === 0) {
         toast({
           title: "Sin operaciones válidas",
-          description: "No se encontraron operaciones válidas en el archivo Excel",
+          description: "No se pudieron procesar los datos del Excel. Verifique la estructura del archivo.",
           variant: "destructive",
         })
         return
@@ -218,11 +213,12 @@ export default function TitulosProcessor() {
       console.error("❌ Error procesando Excel:", error)
       toast({
         title: "Error al procesar Excel",
-        description: "Ocurrió un error al procesar el archivo Excel",
+        description: "Ocurrió un error al leer el archivo Excel. Verifique que el formato sea correcto.",
         variant: "destructive",
       })
     } finally {
       setIsProcessing(false)
+      setShowProgress(false)
     }
   }, [selectedFile, toast])
 
@@ -357,7 +353,6 @@ Saludos`)
     setFiltroMercado("todos")
     setInputFormat("")
     setSelectedFile(null)
-    setFileStructure(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -373,7 +368,6 @@ Saludos`)
     // Limpiar datos del método anterior
     setRawData("")
     setSelectedFile(null)
-    setFileStructure(null)
     setInputFormat("")
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -409,31 +403,39 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
       </div>
 
       {/* Selección de Método de Entrada */}
-      <Card>
+      <Card className="border-2 border-blue-200 bg-blue-50">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-blue-800">
             <FileUp className="w-5 h-5" />
             Método de Carga de Datos
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <Label>Seleccione cómo desea cargar los datos:</Label>
+          <div className="space-y-2">
+            <Label htmlFor="input-method" className="text-sm font-medium text-blue-800">
+              Seleccione cómo desea cargar los datos:
+            </Label>
             <Select value={inputMethod} onValueChange={handleInputMethodChange}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
+              <SelectTrigger className="w-full bg-white border-blue-300">
+                <SelectValue placeholder="Seleccione método de entrada" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="text">
-                  <div className="flex items-center gap-2">
-                    <Type className="w-4 h-4" />
-                    <span>Pegar Texto (Copiar desde tabla)</span>
+                  <div className="flex items-center gap-3 py-2">
+                    <Type className="w-5 h-5 text-green-600" />
+                    <div>
+                      <div className="font-medium">Pegar Texto</div>
+                      <div className="text-xs text-gray-500">Copiar desde tabla o reporte</div>
+                    </div>
                   </div>
                 </SelectItem>
                 <SelectItem value="excel">
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4" />
-                    <span>Cargar Archivo Excel (.xlsx, .xls, .csv)</span>
+                  <div className="flex items-center gap-3 py-2">
+                    <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <div className="font-medium">Cargar Archivo Excel</div>
+                      <div className="text-xs text-gray-500">Subir archivo .xlsx, .xls o .csv</div>
+                    </div>
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -441,9 +443,9 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
           </div>
 
           {/* Información sobre el método seleccionado */}
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
+          <Alert className="border-blue-300 bg-blue-50">
+            <Info className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
               {inputMethod === "text" ? (
                 <>
                   <strong>Método Texto:</strong> Copie y pegue los datos directamente desde una tabla o reporte. Ideal
@@ -452,7 +454,7 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
               ) : (
                 <>
                   <strong>Método Excel:</strong> Cargue un archivo Excel con los datos estructurados. Más confiable para
-                  datos con campos vacíos y estructuras complejas.
+                  datos con campos vacíos y estructuras complejas. ✅ <em>Funcionalidad activa</em>
                 </>
               )}
             </AlertDescription>
@@ -545,6 +547,14 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Alert className="border-blue-300 bg-blue-50">
+              <Info className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-800">
+                <strong>Método Excel:</strong> Cargue un archivo Excel con los datos estructurados. Más confiable para
+                datos con campos vacíos y estructuras complejas. ✅ <em>Funcionalidad activa</em>
+              </AlertDescription>
+            </Alert>
+
             <div>
               <label className="block text-sm font-medium mb-2">Seleccione archivo Excel:</label>
               <div className="flex items-center gap-3">
@@ -554,7 +564,7 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
                   className="flex items-center gap-2"
                 >
                   <Upload className="w-4 h-4" />
-                  Seleccionar Archivo
+                  Seleccionar Archivo Excel
                 </Button>
                 {selectedFile && (
                   <Badge variant="outline" className="flex items-center gap-2">
@@ -573,55 +583,26 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
               <p className="text-xs text-gray-500 mt-1">💡 Formatos soportados: .xlsx, .xls, .csv (máximo 10MB)</p>
             </div>
 
-            {/* Información del archivo seleccionado */}
-            {fileStructure && (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Estructura detectada:</strong>
-                  <ul className="list-disc list-inside mt-1 text-sm">
-                    <li>{fileStructure.rowCount} filas de datos</li>
-                    <li>{fileStructure.columnCount} columnas</li>
-                    <li>
-                      {fileStructure.hasHeaders
-                        ? "Con headers detectados"
-                        : "Sin headers (se asume estructura estándar)"}
-                    </li>
-                  </ul>
-                  {fileStructure.sampleData.length > 0 && (
-                    <div className="mt-2">
-                      <strong>Vista previa:</strong>
-                      <div className="bg-gray-50 p-2 rounded mt-1 font-mono text-xs">
-                        {fileStructure.sampleData.slice(0, 3).map((row, i) => (
-                          <div key={i}>{row.slice(0, 6).join(" | ")}...</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-
             {/* Ayuda para Excel */}
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Estructura esperada del Excel:</strong>
+                <strong>Estructura esperada del Excel (cuando esté disponible):</strong>
                 <ul className="list-disc list-inside mt-1 text-sm">
                   <li>
-                    <strong>Con headers:</strong> El sistema detecta automáticamente las columnas por nombre
+                    <strong>Con headers:</strong> El sistema detectará automáticamente las columnas por nombre
                   </li>
                   <li>
-                    <strong>Sin headers:</strong> Se asume orden estándar: Cliente, CUIT, Especie, Plazo, Moneda, etc.
+                    <strong>Sin headers:</strong> Se asumirá orden estándar: Cliente, CUIT, Especie, Plazo, Moneda, etc.
                   </li>
                   <li>
-                    <strong>Campos vacíos:</strong> Se manejan correctamente y se rellenan con valores por defecto
+                    <strong>Campos vacíos:</strong> Se manejarán correctamente y se rellenarán con valores por defecto
                   </li>
                   <li>
                     <strong>Mercado:</strong> Debe estar en una columna o detectarse en el texto (BYMA, MAV, MAE)
                   </li>
                   <li>
-                    <strong>CUIT:</strong> Se maneja formato científico automáticamente
+                    <strong>CUIT:</strong> Se manejará formato científico automáticamente
                   </li>
                 </ul>
               </AlertDescription>
