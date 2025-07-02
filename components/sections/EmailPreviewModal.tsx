@@ -83,29 +83,77 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
     const body = encodeURIComponent(emailData.mensaje.replace(/<p>/g, "\n\n"))
     const to = encodeURIComponent(emailData.destinatarios)
 
-    const mailtoLink = `mailto:${to}?subject=${subject}&body=${body}`
+    // Crear un formulario temporal para enviar el archivo
+    const form = document.createElement("form")
+    form.method = "POST"
+    form.enctype = "multipart/form-data"
+    form.style.display = "none"
 
-    // Abrir Outlook
-    window.open(mailtoLink, "_blank")
+    // Crear input para el archivo
+    const fileInput = document.createElement("input")
+    fileInput.type = "file"
+    fileInput.name = "attachment"
 
-    // Crear link de descarga para el archivo
-    const downloadLink = document.createElement("a")
-    downloadLink.href = fileUrl
-    downloadLink.download = fileName
-    downloadLink.style.display = "none"
-    document.body.appendChild(downloadLink)
-    downloadLink.click()
-    document.body.removeChild(downloadLink)
+    // Convertir blob a file
+    const file = new File([fileBlob], fileName, { type: fileBlob.type })
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(file)
+    fileInput.files = dataTransfer.files
+
+    form.appendChild(fileInput)
+    document.body.appendChild(form)
+
+    // Abrir Outlook con el archivo adjunto
+    const mailtoLink = `mailto:${to}?subject=${subject}&body=${body}&attachment=${fileName}`
+
+    // Intentar abrir con el archivo adjunto
+    try {
+      // Crear un enlace temporal que incluya el archivo
+      const tempLink = document.createElement("a")
+      tempLink.href = fileUrl
+      tempLink.download = fileName
+      tempLink.style.display = "none"
+      document.body.appendChild(tempLink)
+
+      // Descargar el archivo primero
+      tempLink.click()
+
+      // Luego abrir el email
+      setTimeout(() => {
+        window.open(mailtoLink, "_blank")
+        document.body.removeChild(tempLink)
+        document.body.removeChild(form)
+
+        toast({
+          title: "Email y archivo preparados",
+          description: `Se descargó ${fileName} y se abrió Outlook. Adjunte manualmente el archivo descargado.`,
+        })
+      }, 500)
+    } catch (error) {
+      console.error("Error al preparar email:", error)
+
+      // Fallback: solo descargar archivo y abrir email
+      const downloadLink = document.createElement("a")
+      downloadLink.href = fileUrl
+      downloadLink.download = fileName
+      downloadLink.style.display = "none"
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      document.body.removeChild(downloadLink)
+
+      window.open(mailtoLink, "_blank")
+
+      toast({
+        title: "Email abierto",
+        description: `Se descargó ${fileName}. Adjunte manualmente el archivo al email.`,
+        variant: "destructive",
+      })
+    }
 
     // Limpiar URL después de un tiempo
     setTimeout(() => {
       URL.revokeObjectURL(fileUrl)
-    }, 1000)
-
-    toast({
-      title: "Email abierto",
-      description: `Se abrió Outlook con el email para ${mercado} y se descargó el archivo adjunto`,
-    })
+    }, 2000)
   }
 
   const mercadosConDatos = Object.keys(excelFiles).filter((mercado) => operacionesSummary[mercado] > 0)
