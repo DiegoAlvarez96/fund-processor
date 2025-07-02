@@ -1187,7 +1187,7 @@ function conciliarPorImporte(
 
   let conciliadosPorImporte = 0
 
-  // CORREGIDO: Conciliar por grupos de importe
+  // CORREGIDO: Conciliar SOLO cuando el importe aparece en los 3 tipos de registros
   const importesUnicos = new Set([
     ...Array.from(mapaSolicitudesPorImporte.keys()),
     ...Array.from(mapaRecibosPorImporte.keys()),
@@ -1199,50 +1199,32 @@ function conciliarPorImporte(
     const recibosConImporte = mapaRecibosPorImporte.get(importe) || []
     const movimientosConImporte = mapaMovimientosPorImporte.get(importe) || []
 
-    // Si hay al menos 2 tipos de registros con el mismo importe, conciliar
-    const tiposDisponibles = [
-      solicitudesConImporte.length > 0,
-      recibosConImporte.length > 0,
-      movimientosConImporte.length > 0,
-    ].filter(Boolean).length
-
-    if (tiposDisponibles >= 2) {
+    // CORREGIDO: Solo conciliar si el importe aparece en los 3 tipos de registros
+    if (solicitudesConImporte.length > 0 && recibosConImporte.length > 0 && movimientosConImporte.length > 0) {
       console.log(
         `🟡 Conciliando por importe ${importe}: ${solicitudesConImporte.length} solicitudes, ${recibosConImporte.length} recibos, ${movimientosConImporte.length} movimientos`,
       )
 
       // Marcar solicitudes
       solicitudesConImporte.forEach((solicitud) => {
-        if (recibosConImporte.length > 0) {
-          solicitud.conciliadoRecibosPorImporte = true
-        }
-        if (movimientosConImporte.length > 0) {
-          solicitud.conciliadoMovimientosPorImporte = true
-        }
+        solicitud.conciliadoRecibosPorImporte = true
+        solicitud.conciliadoMovimientosPorImporte = true
         solicitud.tipoConciliacion = "por-importe"
         conciliadosPorImporte++
       })
 
       // Marcar recibos
       recibosConImporte.forEach((recibo) => {
-        if (solicitudesConImporte.length > 0) {
-          recibo.conciliadoSolicitudesPorImporte = true
-        }
-        if (movimientosConImporte.length > 0) {
-          recibo.conciliadoMovimientosPorImporte = true
-        }
+        recibo.conciliadoSolicitudesPorImporte = true
+        recibo.conciliadoMovimientosPorImporte = true
         recibo.tipoConciliacion = "por-importe"
         conciliadosPorImporte++
       })
 
       // Marcar movimientos
       movimientosConImporte.forEach((movimiento) => {
-        if (solicitudesConImporte.length > 0) {
-          movimiento.conciliadoSolicitudesPorImporte = true
-        }
-        if (recibosConImporte.length > 0) {
-          movimiento.conciliadoRecibosPorImporte = true
-        }
+        movimiento.conciliadoSolicitudesPorImporte = true
+        movimiento.conciliadoRecibosPorImporte = true
         movimiento.tipoConciliacion = "por-importe"
         conciliadosPorImporte++
       })
