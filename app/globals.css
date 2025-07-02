@@ -116,4 +116,62 @@
   .bg-adcap-gradient-light {
     background: linear-gradient(135deg, rgb(var(--adcap-accent)) 0%, rgb(var(--adcap-secondary)) 100%);
   }
+
+  /* Colores específicos para badges de mercado */
+  .bg-blue-50 {
+    background-color: #eff6ff;
+  }
+  .text-blue-700 {
+    color: #1d4ed8;
+  }
+  .bg-green-50 {
+    background-color: #f0fdf4;
+  }
+  .text-green-700 {
+    color: #15803d;
+  }
+  .bg-yellow-50 {
+    background-color: #fefce8;
+  }
+  .text-yellow-700 {
+    color: #a16207;
+  }
+  .bg-purple-50 {
+    background-color: #faf5ff;
+  }
+  .text-purple-700 {
+    color: #7c3aed;
+  }
+  .border-blue-200 {
+    border-color: #bfdbfe;
+  }
+  .border-blue-300 {
+    border-color: #93c5fd;
+  }
+  .border-green-200 {
+    border-color: #bbf7d0;
+  }
+  .border-purple-200 {
+    border-color: #e9d5ff;
+  }
+}
+
+/* Estilos específicos para tablas responsivas */
+@layer components {
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-responsive table {
+    min-width: 100%;
+    white-space: nowrap;
+  }
+
+  .table-cell-truncate {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
