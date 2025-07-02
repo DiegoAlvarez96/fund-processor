@@ -307,7 +307,7 @@ export default function ConciliacionTransferencias() {
     }) || []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-2">
       <div>
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
           <BarChart3 className="w-8 h-8" />
@@ -534,16 +534,16 @@ export default function ConciliacionTransferencias() {
       {/* Tablas de Conciliación */}
       {resultadoConciliacion && (
         <div className="space-y-6">
-          {/* Contenedor con scroll horizontal */}
+          {/* Contenedor con scroll horizontal optimizado */}
           <div className="overflow-x-auto">
-            <div className="flex gap-6 min-w-max">
+            <div className="flex gap-4 min-w-max">
               {/* Tabla de Solicitudes de Pago */}
-              <Card className="min-w-96 flex-shrink-0">
+              <Card className="min-w-80 flex-shrink-0">
                 <CardHeader>
                   <CardTitle className="text-lg">Solicitudes de Pago</CardTitle>
                   <div className="flex gap-2">
                     <Select value={filtroSolicitudes} onValueChange={setFiltroSolicitudes}>
-                      <SelectTrigger className="w-40">
+                      <SelectTrigger className="w-36">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -624,12 +624,12 @@ export default function ConciliacionTransferencias() {
               </Card>
 
               {/* Tabla de Recibos de Pago */}
-              <Card className="min-w-96 flex-shrink-0">
+              <Card className="min-w-80 flex-shrink-0">
                 <CardHeader>
                   <CardTitle className="text-lg">Recibos de Pago</CardTitle>
                   <div className="flex gap-2">
                     <Select value={filtroRecibos} onValueChange={setFiltroRecibos}>
-                      <SelectTrigger className="w-40">
+                      <SelectTrigger className="w-36">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -708,12 +708,12 @@ export default function ConciliacionTransferencias() {
               </Card>
 
               {/* Tabla de Movimientos Bancarios */}
-              <Card className="min-w-96 flex-shrink-0">
+              <Card className="min-w-80 flex-shrink-0">
                 <CardHeader>
                   <CardTitle className="text-lg">Movimientos Bancarios</CardTitle>
                   <div className="flex gap-2">
                     <Select value={filtroMovimientos} onValueChange={setFiltroMovimientos}>
-                      <SelectTrigger className="w-40">
+                      <SelectTrigger className="w-36">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -759,7 +759,7 @@ export default function ConciliacionTransferencias() {
                             }
                           >
                             <TableCell className="text-xs">{movimiento.fecha}</TableCell>
-                            <TableCell className="text-xs truncate max-w-32" title={movimiento.beneficiario}>
+                            <TableCell className="text-xs truncate max-w-28" title={movimiento.beneficiario}>
                               {movimiento.beneficiario}
                             </TableCell>
                             <TableCell className="text-xs font-mono">{movimiento.cuit}</TableCell>
@@ -801,7 +801,7 @@ export default function ConciliacionTransferencias() {
 
       {/* Tablas Adicionales */}
       {resultadoConciliacion && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Transferencias Monetarias */}
           <Card>
             <CardHeader>
@@ -825,7 +825,7 @@ export default function ConciliacionTransferencias() {
                     {resultadoConciliacion.transferenciasMonetarias.map((transferencia) => (
                       <TableRow key={transferencia.id}>
                         <TableCell className="text-xs">{transferencia.fecha}</TableCell>
-                        <TableCell className="text-xs truncate max-w-32" title={transferencia.beneficiario}>
+                        <TableCell className="text-xs truncate max-w-28" title={transferencia.beneficiario}>
                           {transferencia.beneficiario}
                         </TableCell>
                         <TableCell className="text-xs">
@@ -852,8 +852,8 @@ export default function ConciliacionTransferencias() {
           {/* Movimientos de Mercados */}
           <Card>
             <CardHeader>
-              <CardTitle>📈 Mercados (BYMA)</CardTitle>
-              <p className="text-sm text-gray-500">BYMA S.A. BOLSAS Y MERCADOS AR - 30711610126 (Débitos y Créditos)</p>
+              <CardTitle>📈 Mercados</CardTitle>
+              <p className="text-sm text-gray-500">MATBA ROFEX, BYMA, MAV, MAE - 30711610126 (Débitos y Créditos)</p>
             </CardHeader>
             <CardContent>
               <div className="max-h-64 overflow-y-auto overflow-x-auto">
@@ -872,7 +872,7 @@ export default function ConciliacionTransferencias() {
                     {resultadoConciliacion.movimientosMercados.map((mercado) => (
                       <TableRow key={mercado.id}>
                         <TableCell className="text-xs">{mercado.fecha}</TableCell>
-                        <TableCell className="text-xs truncate max-w-32" title={mercado.beneficiario}>
+                        <TableCell className="text-xs truncate max-w-28" title={mercado.beneficiario}>
                           {mercado.beneficiario}
                         </TableCell>
                         <TableCell className="text-xs">
