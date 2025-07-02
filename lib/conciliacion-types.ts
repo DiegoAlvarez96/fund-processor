@@ -1,4 +1,5 @@
-// Tipos base para Status Órdenes de Pago
+// Tipos base para los datos de conciliación
+
 export interface StatusOrdenPago {
   fechaConcertacion: string
   comitenteNumero: string
@@ -13,7 +14,6 @@ export interface StatusOrdenPago {
   datosOriginales: Record<string, any>
 }
 
-// Tipos para Confirmación de Solicitudes
 export interface ConfirmacionSolicitud {
   fecha: string
   estado: string
@@ -21,10 +21,10 @@ export interface ConfirmacionSolicitud {
   comitenteDenominacion: string
   monedaDescripcion: string
   importe: number
+  cuit: string // NUEVA: Agregar CUIT a Confirmación de Solicitudes
   datosOriginales: Record<string, any>
 }
 
-// Tipos para Solicitudes de Pago (unión de Status y Confirmación)
 export interface SolicitudPago {
   id: string
   fecha: string
@@ -40,7 +40,6 @@ export interface SolicitudPago {
   datosOriginales: Record<string, any>
 }
 
-// Tipos para Recibos de Pago
 export interface ReciboPago {
   id: string
   fechaLiquidacion: string
@@ -53,7 +52,6 @@ export interface ReciboPago {
   datosOriginales: Record<string, any>
 }
 
-// Tipos para Movimientos Bancarios
 export interface MovimientoBancario {
   id: string
   fecha: string
@@ -67,7 +65,6 @@ export interface MovimientoBancario {
   datosOriginales: Record<string, any>
 }
 
-// Tipos para Transferencias Monetarias
 export interface TransferenciaMonetaria {
   id: string
   fecha: string
@@ -79,7 +76,6 @@ export interface TransferenciaMonetaria {
   datosOriginales: Record<string, any>
 }
 
-// Tipos para Movimientos de Mercados
 export interface MovimientoMercado {
   id: string
   fecha: string
@@ -91,7 +87,6 @@ export interface MovimientoMercado {
   datosOriginales: Record<string, any>
 }
 
-// Estadísticas de conciliación
 export interface EstadisticasConciliacion {
   totalSolicitudes: number
   totalRecibos: number
@@ -100,7 +95,6 @@ export interface EstadisticasConciliacion {
   noConciliados: number
 }
 
-// Resultado completo de la conciliación
 export interface ResultadoConciliacion {
   solicitudesPago: SolicitudPago[]
   recibosPago: ReciboPago[]
@@ -110,38 +104,26 @@ export interface ResultadoConciliacion {
   estadisticas: EstadisticasConciliacion
 }
 
-// Tipos para exportación a Excel
+// Tipos para el resumen de Excel
+export interface ResumenItem {
+  cantidad: number
+  importeTotal: number
+  conciliados: number
+  noConciliados: number
+}
+
+export interface DiferenciaItem {
+  cantidad: number
+  importe: number
+}
+
 export interface ResumenConciliacion {
-  solicitudes: {
-    cantidad: number
-    importeTotal: number
-    conciliados: number
-    noConciliados: number
-  }
-  recibos: {
-    cantidad: number
-    importeTotal: number
-    conciliados: number
-    noConciliados: number
-  }
-  movimientos: {
-    cantidad: number
-    importeTotal: number
-    conciliados: number
-    noConciliados: number
-  }
+  solicitudes: ResumenItem
+  recibos: ResumenItem
+  movimientos: ResumenItem
   diferencias: {
-    solicitudesVsRecibos: {
-      cantidad: number
-      importe: number
-    }
-    solicitudesVsMovimientos: {
-      cantidad: number
-      importe: number
-    }
-    recibosVsMovimientos: {
-      cantidad: number
-      importe: number
-    }
+    solicitudesVsRecibos: DiferenciaItem
+    solicitudesVsMovimientos: DiferenciaItem
+    recibosVsMovimientos: DiferenciaItem
   }
 }
