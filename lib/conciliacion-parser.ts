@@ -115,11 +115,21 @@ function convertirFecha(fechaStr: string): string {
   }
 }
 
-// Función para extraer símbolo de moneda de texto como "Pesos / $" o "Dolar MEP (Local) / USD D"
+// Función para extraer símbolo de moneda de texto como "Pesos / $", "Dolar MEP (Local) / USD D", "$", "USD D"
 function extraerSimboloMoneda(monedaStr: string): string {
   if (!monedaStr) return "$" // Por defecto, pesos
 
-  const monedaUpper = monedaStr.toUpperCase()
+  const monedaUpper = monedaStr.toUpperCase().trim()
+
+  // Si es exactamente "USD D", devolver "USD"
+  if (monedaUpper === "USD D") {
+    return "USD"
+  }
+
+  // Si es exactamente "$", devolver "$"
+  if (monedaStr.trim() === "$") {
+    return "$"
+  }
 
   // Buscar patrones específicos
   if (monedaUpper.includes("USD") || monedaUpper.includes("DOLAR") || monedaUpper.includes("DÓLAR")) {
@@ -130,10 +140,11 @@ function extraerSimboloMoneda(monedaStr: string): string {
   if (monedaStr.includes("/")) {
     const partes = monedaStr.split("/")
     const simbolo = partes[1].trim()
-    if (simbolo === "$" || simbolo.startsWith("$")) {
+
+    if (simbolo === "$") {
       return "$"
     }
-    if (simbolo.includes("USD")) {
+    if (simbolo.toUpperCase().includes("USD") || simbolo.toUpperCase() === "USD D") {
       return "USD"
     }
     return simbolo
@@ -144,15 +155,38 @@ function extraerSimboloMoneda(monedaStr: string): string {
     return "$"
   }
 
-  return monedaStr // Devolver tal cual si no se reconoce
+  return "$" // Por defecto, pesos
 }
 
-// Función para convertir importe de texto a número
+// Función para convertir importe de texto a número - MEJORADA para USD
 function convertirImporte(importeStr: string): number {
   if (!importeStr) return 0
 
-  // Remover símbolos de moneda y espacios
-  let limpio = importeStr.toString().replace(/[$\s]/g, "")
+  // Convertir a string si no lo es
+  let limpio = importeStr.toString().trim()
+
+  // Si está vacío después del trim, devolver 0
+  if (!limpio) return 0
+
+  // Remover símbolos de moneda y espacios, pero mantener signos negativos
+  const esNegativo = limpio.startsWith("-")
+  limpio = limpio.replace(/[$\s-]/g, "")
+
+  // Si después de limpiar está vacío, devolver 0
+  if (!limpio) return 0
+
+  // Manejar formato científico (ej: 1.23E+5)
+  if (limpio.includes("E") || limpio.includes("e")) {
+    try {
+      const numero = Number.parseFloat(limpio)
+      if (!isNaN(numero)) {
+        return esNegativo ? -numero : numero
+      }
+    } catch (error) {
+      console.warn(`Error convirtiendo importe científico: ${importeStr}`)
+      return 0
+    }
+  }
 
   // Reemplazar comas por puntos para decimales
   limpio = limpio.replace(/,/g, ".")
@@ -164,7 +198,14 @@ function convertirImporte(importeStr: string): number {
     limpio = puntos.slice(0, -1).join("") + "." + puntos[puntos.length - 1]
   }
 
-  return Number.parseFloat(limpio) || 0
+  const numero = Number.parseFloat(limpio)
+
+  if (isNaN(numero)) {
+    console.warn(`No se pudo convertir importe: ${importeStr}`)
+    return 0
+  }
+
+  return esNegativo ? -numero : numero
 }
 
 // Función para extraer CUIT del beneficiario
@@ -318,6 +359,8 @@ function tieneHeaders(primeraFila: any[]): boolean {
     "estado",
     "mercado",
     "denominacion",
+    "anulado",
+    "titular",
   ]
 
   const textoFila = primeraFila.join(" ").toLowerCase()
@@ -643,7 +686,8 @@ export async function parseRecibosPago(
           colComitenteNum = -1
         let colImporte = -1,
           colCuit = -1,
-          colMoneda = -1
+          colMoneda = -1,
+          colAnulado = -1
 
         if (hayHeaders) {
           headers = jsonData[headerRow] || []
@@ -659,7 +703,16 @@ export async function parseRecibosPago(
           colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero", "cliente"])
           colImporte = buscarColumna(headers, ["importe"])
           colCuit = buscarColumna(headers, ["cuit/cuil titular", "cuit", "cuil"])
-          colMoneda = buscarColumna(headers, ["moneda", "moneda descripción", "moneda descripcion"])
+          // NUEVA: Buscar columna de moneda específica "Titular Moneda (Símbolo)"
+          colMoneda = buscarColumna(headers, [
+            "titular moneda (símbolo)",
+            "titular moneda símbolo",
+            "moneda símbolo",
+            "moneda (símbolo)",
+            "moneda",
+          ])
+          // NUEVA: Buscar columna "esta anulado"
+          colAnulado = buscarColumna(headers, ["esta anulado", "anulado"])
         } else {
           // Orden estándar sin headers
           colFechaLiq = 0
@@ -668,6 +721,7 @@ export async function parseRecibosPago(
           colImporte = 3
           colCuit = 4
           colMoneda = 5
+          colAnulado = 6
         }
 
         console.log("Índices Recibos:", {
@@ -677,6 +731,7 @@ export async function parseRecibosPago(
           colImporte,
           colCuit,
           colMoneda,
+          colAnulado,
         })
 
         // Primera pasada: procesar todos los registros
@@ -685,6 +740,16 @@ export async function parseRecibosPago(
           if (!row || row.length === 0) continue
 
           try {
+            // NUEVO: Filtrar registros anulados
+            if (colAnulado >= 0) {
+              const estaAnulado = row[colAnulado]?.toString() || "0"
+              // Si "esta anulado" es diferente de 0, saltar este registro
+              if (estaAnulado !== "0" && estaAnulado.toLowerCase() !== "false") {
+                console.log(`⚠️ Saltando recibo anulado en fila ${i + 1}`)
+                continue
+              }
+            }
+
             // Crear objeto con datos originales
             const datosOriginales: Record<string, any> = {}
             if (hayHeaders) {
@@ -699,9 +764,11 @@ export async function parseRecibosPago(
               })
             }
 
-            // Extraer y convertir moneda
+            // Extraer y convertir moneda desde la columna específica
             const monedaTexto = colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$"
             const moneda = extraerSimboloMoneda(monedaTexto)
+
+            console.log(`Fila ${i + 1}: Moneda original: "${monedaTexto}" -> Convertida: "${moneda}"`)
 
             const recibo: ReciboPago = {
               id: `recibo-${Date.now()}-${i}`,
@@ -710,7 +777,7 @@ export async function parseRecibosPago(
               comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
               importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
               cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
-              moneda: moneda, // Agregar moneda al recibo
+              moneda: moneda, // Usar la moneda extraída
               conciliadoSolicitudes: false,
               conciliadoMovimientos: false,
               datosOriginales,
@@ -805,8 +872,14 @@ export async function parseMovimientosBancarios(file: File): Promise<{
             const fecha = convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : "")
             const beneficiario = colBeneficiario >= 0 ? row[colBeneficiario]?.toString() || "" : ""
             const dc = colDC >= 0 ? row[colDC]?.toString().toUpperCase() || "" : ""
-            const importe = convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0")
+            const importeStr = colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"
+            const importe = convertirImporte(importeStr)
             const cuit = extraerCuitBeneficiario(beneficiario)
+
+            // Debug para importes USD
+            if (moneda === "USD") {
+              console.log(`Fila ${i + 1} USD: Importe original: "${importeStr}" -> Convertido: ${importe}`)
+            }
 
             // NUEVO: Ignorar movimientos con beneficiario que solo contiene guiones (impuestos)
             if (esImpuesto(beneficiario)) {
