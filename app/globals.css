@@ -14,7 +14,7 @@
     --adcap-gray-light: 148 163 184; /* Gris claro #94A3B8 */
 
     /* Variables del sistema actualizadas */
-    --background: 0 0% 100%; /* Fondo muy claro */
+    --background: 249 250 251; /* ✅ FONDO GRIS CLARO en lugar de blanco puro */
     --foreground: 222.2 84% 4.9%; /* Texto principal */
     --card: 0 0% 100%; /* Fondo de tarjetas */
     --card-foreground: 222.2 84% 4.9%; /* Texto de tarjetas */
