@@ -14,9 +14,30 @@ import { getCuitByComitente } from "./comitente-lookup"
 // Cache para CUITs ya buscados
 const cuitCache = new Map<string, string>()
 
-// Función para limpiar CUIT (eliminar guiones)
+// Función para limpiar CUIT (eliminar guiones y formato científico)
 function limpiarCuit(cuit: string): string {
-  return cuit?.toString().replace(/[-\s]/g, "") || ""
+  if (!cuit) return ""
+
+  let cuitLimpio = cuit.toString().replace(/[-\s]/g, "")
+
+  // Manejar formato científico (ej: 3.07E+10)
+  if (cuitLimpio.includes("E") || cuitLimpio.includes("e")) {
+    try {
+      const numero = Number.parseFloat(cuitLimpio)
+      if (!isNaN(numero)) {
+        cuitLimpio = Math.round(numero).toString()
+      }
+    } catch (error) {
+      console.warn(`Error convirtiendo CUIT científico: ${cuit}`)
+    }
+  }
+
+  // Asegurar que tenga 11 dígitos
+  if (cuitLimpio.length === 10) {
+    cuitLimpio = "0" + cuitLimpio
+  }
+
+  return cuitLimpio
 }
 
 // Función para convertir fecha de formato "Jun 27 2025 12:00AM" a "27/06/2025"
@@ -129,6 +150,20 @@ function inferirMoneda(nombreArchivo: string): string {
   return "$" // Pesos por defecto
 }
 
+// Función para detectar mercado en texto
+function detectarMercado(texto: string): string {
+  if (!texto) return ""
+
+  const textoUpper = texto.toUpperCase()
+
+  if (textoUpper.includes("BYMA")) return "BYMA"
+  if (textoUpper.includes("MAV") || textoUpper.includes("MERCADO ARGENTINO DE VALORES")) return "MAV"
+  if (textoUpper.includes("MAE")) return "MAE"
+  if (textoUpper.includes("MATBA") || textoUpper.includes("ROFEX")) return "MATBA ROFEX"
+
+  return ""
+}
+
 // Función para buscar índice de columna por nombre
 function buscarColumna(headers: string[], nombres: string[]): number {
   for (let i = 0; i < headers.length; i++) {
@@ -221,6 +256,31 @@ async function procesarCuitsEnLotes<T extends { comitenteNumero: string; cuit: s
   }
 }
 
+// Función para detectar si hay headers en la primera fila
+function tieneHeaders(primeraFila: any[]): boolean {
+  if (!primeraFila || primeraFila.length === 0) return false
+
+  // Buscar palabras clave típicas de headers
+  const palabrasClave = [
+    "fecha",
+    "comitente",
+    "cliente",
+    "cuit",
+    "cuil",
+    "especie",
+    "plazo",
+    "moneda",
+    "importe",
+    "beneficiario",
+    "estado",
+    "mercado",
+    "denominacion",
+  ]
+
+  const textoFila = primeraFila.join(" ").toLowerCase()
+  return palabrasClave.some((palabra) => textoFila.includes(palabra))
+}
+
 // Parser para Status Órdenes de Pago
 export async function parseStatusOrdenesPago(
   file: File,
@@ -239,45 +299,63 @@ export async function parseStatusOrdenesPago(
 
         const resultados: StatusOrdenPago[] = []
 
-        // Buscar header
-        let headerRow = -1
-        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-          const row = jsonData[i]
-          if (
-            row &&
-            row.some(
-              (cell) =>
-                cell?.toString().toLowerCase().includes("fecha") ||
-                cell?.toString().toLowerCase().includes("comitente"),
-            )
-          ) {
-            headerRow = i
-            break
-          }
+        // Detectar si hay headers
+        const hayHeaders = tieneHeaders(jsonData[0])
+        const headerRow = hayHeaders ? 0 : -1
+        const dataStartRow = hayHeaders ? 1 : 0
+
+        console.log(`📋 Headers detectados: ${hayHeaders ? "SÍ" : "NO"}`)
+
+        let headers: string[] = []
+        let colFecha = -1,
+          colComitenteNum = -1,
+          colComitenteDesc = -1
+        let colMoneda = -1,
+          colImporte = -1,
+          colCuit = -1,
+          colEstado = -1
+        let colEspecie = -1,
+          colPlazo = -1,
+          colMercado = -1
+
+        if (hayHeaders) {
+          headers = jsonData[headerRow] || []
+          console.log("Headers Status Órdenes:", headers)
+
+          // Buscar índices de columnas
+          colFecha = buscarColumna(headers, ["fecha de concertación", "fecha concertación", "fecha"])
+          colComitenteNum = buscarColumna(headers, [
+            "comitente (número)",
+            "comitente numero",
+            "numero comitente",
+            "cliente",
+          ])
+          colComitenteDesc = buscarColumna(headers, [
+            "comitente (descripción)",
+            "comitente descripcion",
+            "descripcion",
+            "denominacion",
+          ])
+          colMoneda = buscarColumna(headers, ["moneda"])
+          colImporte = buscarColumna(headers, ["importe"])
+          colCuit = buscarColumna(headers, ["cuit / cuil", "cuit/cuil", "cuit", "cuil"])
+          colEstado = buscarColumna(headers, ["estado"])
+          colEspecie = buscarColumna(headers, ["especie"])
+          colPlazo = buscarColumna(headers, ["plazo"])
+          colMercado = buscarColumna(headers, ["mercado"])
+        } else {
+          // Orden estándar sin headers: Cliente, CUIT, Especie, Plazo, Moneda, etc.
+          colComitenteNum = 0
+          colCuit = 1
+          colEspecie = 2
+          colPlazo = 3
+          colMoneda = 4
+          colImporte = 5
+          colFecha = 6
+          colEstado = 7
+          colMercado = 8
+          colComitenteDesc = 9
         }
-
-        if (headerRow === -1) {
-          console.warn("No se encontró header en Status Órdenes de Pago")
-          resolve([])
-          return
-        }
-
-        const headers = jsonData[headerRow] || []
-        console.log("Headers Status Órdenes:", headers)
-
-        // Buscar índices de columnas
-        const colFecha = buscarColumna(headers, ["fecha de concertación", "fecha concertación", "fecha"])
-        const colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero comitente"])
-        const colComitenteDesc = buscarColumna(headers, [
-          "comitente (descripción)",
-          "comitente descripcion",
-          "descripcion",
-        ])
-        const colMoneda = buscarColumna(headers, ["moneda"])
-        const colImporte = buscarColumna(headers, ["importe"])
-        // Buscar columna CUIT/CUIL con mayor flexibilidad
-        const colCuit = buscarColumna(headers, ["cuit / cuil", "cuit/cuil", "cuit", "cuil"])
-        const colEstado = buscarColumna(headers, ["estado"])
 
         console.log("Índices Status Órdenes:", {
           colFecha,
@@ -287,30 +365,52 @@ export async function parseStatusOrdenesPago(
           colImporte,
           colCuit,
           colEstado,
+          colEspecie,
+          colPlazo,
+          colMercado,
         })
 
         // Primera pasada: procesar todos los registros
-        for (let i = headerRow + 1; i < jsonData.length; i++) {
+        for (let i = dataStartRow; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
 
           try {
             // Crear objeto con datos originales
             const datosOriginales: Record<string, any> = {}
-            headers.forEach((header, index) => {
-              if (header && row[index] !== undefined) {
-                datosOriginales[header] = row[index]
-              }
-            })
+            if (hayHeaders) {
+              headers.forEach((header, index) => {
+                if (header && row[index] !== undefined) {
+                  datosOriginales[header] = row[index]
+                }
+              })
+            } else {
+              // Sin headers, usar índices
+              row.forEach((valor, index) => {
+                datosOriginales[`Columna_${index}`] = valor
+              })
+            }
+
+            // Detectar mercado si no hay columna específica
+            let mercado = colMercado >= 0 ? row[colMercado]?.toString() || "" : ""
+            if (!mercado) {
+              // Buscar en especie o descripción
+              const especie = colEspecie >= 0 ? row[colEspecie]?.toString() || "" : ""
+              const descripcion = colComitenteDesc >= 0 ? row[colComitenteDesc]?.toString() || "" : ""
+              mercado = detectarMercado(especie) || detectarMercado(descripcion)
+            }
 
             const statusOrden: StatusOrdenPago = {
               fechaConcertacion: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
               comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
               comitenteDescripcion: colComitenteDesc >= 0 ? row[colComitenteDesc]?.toString() || "" : "",
-              moneda: colMoneda >= 0 ? row[colMoneda]?.toString() || "" : "",
+              moneda: colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$",
               importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
               cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
-              estado: colEstado >= 0 ? row[colEstado]?.toString() || "" : "",
+              estado: colEstado >= 0 ? row[colEstado]?.toString() || "PENDIENTE" : "PENDIENTE",
+              especie: colEspecie >= 0 ? row[colEspecie]?.toString() || "" : "",
+              plazo: colPlazo >= 0 ? row[colPlazo]?.toString() || "" : "",
+              mercado: mercado,
               datosOriginales,
             }
 
@@ -356,43 +456,45 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
 
         const resultados: ConfirmacionSolicitud[] = []
 
-        // Buscar header
-        let headerRow = -1
-        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-          const row = jsonData[i]
-          if (
-            row &&
-            row.some(
-              (cell) =>
-                cell?.toString().toLowerCase().includes("fecha") ||
-                cell?.toString().toLowerCase().includes("comitente"),
-            )
-          ) {
-            headerRow = i
-            break
-          }
+        // Detectar si hay headers
+        const hayHeaders = tieneHeaders(jsonData[0])
+        const headerRow = hayHeaders ? 0 : -1
+        const dataStartRow = hayHeaders ? 1 : 0
+
+        console.log(`📋 Headers detectados en Confirmación: ${hayHeaders ? "SÍ" : "NO"}`)
+
+        let headers: string[] = []
+        let colFecha = -1,
+          colEstado = -1,
+          colComitenteNum = -1
+        let colComitenteDenom = -1,
+          colMonedaDesc = -1,
+          colImporte = -1
+
+        if (hayHeaders) {
+          headers = jsonData[headerRow] || []
+          console.log("Headers Confirmación:", headers)
+
+          // Buscar índices de columnas
+          colFecha = buscarColumna(headers, ["fecha"])
+          colEstado = buscarColumna(headers, ["estado"])
+          colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero", "cliente"])
+          colComitenteDenom = buscarColumna(headers, [
+            "comitente (denominación)",
+            "comitente denominacion",
+            "denominacion",
+          ])
+          colMonedaDesc = buscarColumna(headers, ["moneda (descripción)", "moneda descripcion", "moneda"])
+          colImporte = buscarColumna(headers, ["importe"])
+        } else {
+          // Orden estándar sin headers
+          colFecha = 0
+          colEstado = 1
+          colComitenteNum = 2
+          colComitenteDenom = 3
+          colMonedaDesc = 4
+          colImporte = 5
         }
-
-        if (headerRow === -1) {
-          console.warn("No se encontró header en Confirmación de Solicitudes")
-          resolve([])
-          return
-        }
-
-        const headers = jsonData[headerRow] || []
-        console.log("Headers Confirmación:", headers)
-
-        // Buscar índices de columnas
-        const colFecha = buscarColumna(headers, ["fecha"])
-        const colEstado = buscarColumna(headers, ["estado"])
-        const colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero"])
-        const colComitenteDenom = buscarColumna(headers, [
-          "comitente (denominación)",
-          "comitente denominacion",
-          "denominacion",
-        ])
-        const colMonedaDesc = buscarColumna(headers, ["moneda (descripción)", "moneda descripcion", "moneda"])
-        const colImporte = buscarColumna(headers, ["importe"])
 
         console.log("Índices Confirmación:", {
           colFecha,
@@ -403,25 +505,31 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
           colImporte,
         })
 
-        for (let i = headerRow + 1; i < jsonData.length; i++) {
+        for (let i = dataStartRow; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
 
           try {
             // Crear objeto con datos originales
             const datosOriginales: Record<string, any> = {}
-            headers.forEach((header, index) => {
-              if (header && row[index] !== undefined) {
-                datosOriginales[header] = row[index]
-              }
-            })
+            if (hayHeaders) {
+              headers.forEach((header, index) => {
+                if (header && row[index] !== undefined) {
+                  datosOriginales[header] = row[index]
+                }
+              })
+            } else {
+              row.forEach((valor, index) => {
+                datosOriginales[`Columna_${index}`] = valor
+              })
+            }
 
             const confirmacion: ConfirmacionSolicitud = {
               fecha: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
-              estado: colEstado >= 0 ? row[colEstado]?.toString() || "" : "",
+              estado: colEstado >= 0 ? row[colEstado]?.toString() || "PENDIENTE" : "PENDIENTE",
               comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
               comitenteDenominacion: colComitenteDenom >= 0 ? row[colComitenteDenom]?.toString() || "" : "",
-              monedaDescripcion: colMonedaDesc >= 0 ? row[colMonedaDesc]?.toString() || "" : "",
+              monedaDescripcion: colMonedaDesc >= 0 ? row[colMonedaDesc]?.toString() || "$" : "$",
               importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
               datosOriginales,
             }
@@ -464,42 +572,42 @@ export async function parseRecibosPago(
 
         const resultados: ReciboPago[] = []
 
-        // Buscar header
-        let headerRow = -1
-        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
-          const row = jsonData[i]
-          if (
-            row &&
-            row.some(
-              (cell) =>
-                cell?.toString().toLowerCase().includes("fecha") ||
-                cell?.toString().toLowerCase().includes("comitente"),
-            )
-          ) {
-            headerRow = i
-            break
-          }
+        // Detectar si hay headers
+        const hayHeaders = tieneHeaders(jsonData[0])
+        const headerRow = hayHeaders ? 0 : -1
+        const dataStartRow = hayHeaders ? 1 : 0
+
+        console.log(`📋 Headers detectados en Recibos: ${hayHeaders ? "SÍ" : "NO"}`)
+
+        let headers: string[] = []
+        let colFechaLiq = -1,
+          colComitenteDenom = -1,
+          colComitenteNum = -1
+        let colImporte = -1,
+          colCuit = -1
+
+        if (hayHeaders) {
+          headers = jsonData[headerRow] || []
+          console.log("Headers Recibos:", headers)
+
+          // Buscar índices de columnas
+          colFechaLiq = buscarColumna(headers, ["fecha de liquidación", "fecha liquidacion", "fecha"])
+          colComitenteDenom = buscarColumna(headers, [
+            "comitente (denominación)",
+            "comitente denominacion",
+            "denominacion",
+          ])
+          colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero", "cliente"])
+          colImporte = buscarColumna(headers, ["importe"])
+          colCuit = buscarColumna(headers, ["cuit/cuil titular", "cuit", "cuil"])
+        } else {
+          // Orden estándar sin headers
+          colFechaLiq = 0
+          colComitenteDenom = 1
+          colComitenteNum = 2
+          colImporte = 3
+          colCuit = 4
         }
-
-        if (headerRow === -1) {
-          console.warn("No se encontró header en Recibos de Pago")
-          resolve([])
-          return
-        }
-
-        const headers = jsonData[headerRow] || []
-        console.log("Headers Recibos:", headers)
-
-        // Buscar índices de columnas
-        const colFechaLiq = buscarColumna(headers, ["fecha de liquidación", "fecha liquidacion", "fecha"])
-        const colComitenteDenom = buscarColumna(headers, [
-          "comitente (denominación)",
-          "comitente denominacion",
-          "denominacion",
-        ])
-        const colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero"])
-        const colImporte = buscarColumna(headers, ["importe"])
-        const colCuit = buscarColumna(headers, ["cuit/cuil titular", "cuit", "cuil"])
 
         console.log("Índices Recibos:", {
           colFechaLiq,
@@ -510,18 +618,24 @@ export async function parseRecibosPago(
         })
 
         // Primera pasada: procesar todos los registros
-        for (let i = headerRow + 1; i < jsonData.length; i++) {
+        for (let i = dataStartRow; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
 
           try {
             // Crear objeto con datos originales
             const datosOriginales: Record<string, any> = {}
-            headers.forEach((header, index) => {
-              if (header && row[index] !== undefined) {
-                datosOriginales[header] = row[index]
-              }
-            })
+            if (hayHeaders) {
+              headers.forEach((header, index) => {
+                if (header && row[index] !== undefined) {
+                  datosOriginales[header] = row[index]
+                }
+              })
+            } else {
+              row.forEach((valor, index) => {
+                datosOriginales[`Columna_${index}`] = valor
+              })
+            }
 
             const recibo: ReciboPago = {
               id: `recibo-${Date.now()}-${i}`,
