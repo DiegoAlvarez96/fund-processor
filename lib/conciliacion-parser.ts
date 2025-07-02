@@ -469,7 +469,8 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
           colComitenteNum = -1
         let colComitenteDenom = -1,
           colMonedaDesc = -1,
-          colImporte = -1
+          colImporte = -1,
+          colCuit = -1
 
         if (hayHeaders) {
           headers = jsonData[headerRow] || []
@@ -486,6 +487,8 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
           ])
           colMonedaDesc = buscarColumna(headers, ["moneda (descripción)", "moneda descripcion", "moneda"])
           colImporte = buscarColumna(headers, ["importe"])
+          // NUEVA: Buscar columna CUIT en Confirmación de Solicitudes
+          colCuit = buscarColumna(headers, ["cuit / cuil", "cuit/cuil", "cuit", "cuil"])
         } else {
           // Orden estándar sin headers
           colFecha = 0
@@ -494,6 +497,7 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
           colComitenteDenom = 3
           colMonedaDesc = 4
           colImporte = 5
+          colCuit = 6 // Agregar CUIT en posición 6
         }
 
         console.log("Índices Confirmación:", {
@@ -503,6 +507,7 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
           colComitenteDenom,
           colMonedaDesc,
           colImporte,
+          colCuit,
         })
 
         for (let i = dataStartRow; i < jsonData.length; i++) {
@@ -531,6 +536,8 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
               comitenteDenominacion: colComitenteDenom >= 0 ? row[colComitenteDenom]?.toString() || "" : "",
               monedaDescripcion: colMonedaDesc >= 0 ? row[colMonedaDesc]?.toString() || "$" : "$",
               importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
+              // NUEVA: Leer y limpiar CUIT de Confirmación de Solicitudes
+              cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
               datosOriginales,
             }
 
@@ -888,7 +895,7 @@ export function crearSolicitudesPago(
             ? "USD"
             : confirmacion.monedaDescripcion,
       importe: confirmacion.importe,
-      cuit: "", // Las confirmaciones no tienen CUIT directo
+      cuit: confirmacion.cuit, // AHORA usa el CUIT de Confirmación de Solicitudes
       estado: confirmacion.estado,
       origen: "confirmacion",
       conciliadoRecibos: false,
