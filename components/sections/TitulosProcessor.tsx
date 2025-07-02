@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -9,11 +9,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileSpreadsheet, Mail, Trash2, FileText, TrendingUp, AlertCircle, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { TituloOperacion } from "@/lib/titulos-parser"
-import { parseTitulosData, getMercadoSummary, detectInputFormat, parseFromTableCopy } from "@/lib/titulos-parser"
+import {
+  parseTitulosDataBatched,
+  getMercadoSummary,
+  detectInputFormat,
+  type ProcessingProgress,
+} from "@/lib/titulos-parser"
 import { generateAllTitulosExcel } from "@/lib/titulos-excel"
 import { MERCADO_CONFIG } from "@/lib/titulos-config"
-import TitulosTable from "./TitulosTable"
+import VirtualizedTitulosTable from "./VirtualizedTitulosTable"
 import EmailPreviewModal from "./EmailPreviewModal"
+import ProgressModal from "@/components/ui/progress-modal"
 
 export default function TitulosProcessor() {
   const [rawData, setRawData] = useState("")
@@ -37,8 +43,8 @@ export default function TitulosProcessor() {
     }
   }
 
-  // Procesar datos pegados con múltiples métodos
-  const procesarDatos = () => {
+  // Procesar datos con lotes y barra de progreso (memoizado)
+  const procesarDatos = useCallback(async () => {
     if (!rawData.trim()) {
       toast({
         title: "Sin datos",
@@ -49,28 +55,20 @@ export default function TitulosProcessor() {
     }
 
     setIsProcessing(true)
+    setShowProgress(true)
+    setProgress({ processed: 0, total: 0, currentBatch: 0, totalBatches: 0, currentStep: "Iniciando..." })
 
     try {
-      console.log("🔄 Iniciando procesamiento de datos...")
+      console.log("🔄 Iniciando procesamiento por lotes...")
       console.log("📊 Formato detectado:", inputFormat)
 
-      let operacionesParsed: TituloOperacion[] = []
-
-      // Intentar múltiples métodos de parsing
-      console.log("🔄 Método 1: Parser principal...")
-      operacionesParsed = parseTitulosData(rawData)
-
-      // Si no funciona, intentar parser específico para tablas
-      if (operacionesParsed.length === 0) {
-        console.log("🔄 Método 2: Parser de tabla...")
-        operacionesParsed = parseFromTableCopy(rawData)
-      }
-
-      // Si aún no funciona, intentar parsing línea por línea más agresivo
-      if (operacionesParsed.length === 0) {
-        console.log("🔄 Método 3: Parser agresivo...")
-        operacionesParsed = parseAggressively(rawData)
-      }
+      const operacionesParsed = await parseTitulosDataBatched(
+        rawData,
+        (progressData: ProcessingProgress) => {
+          setProgress(progressData)
+        },
+        150, // Tamaño de lote optimizado
+      )
 
       if (operacionesParsed.length === 0) {
         toast({
@@ -79,7 +77,6 @@ export default function TitulosProcessor() {
             "No se pudieron procesar los datos. Verifique el formato y que contengan BYMA, MAV o MAE al final de cada línea.",
           variant: "destructive",
         })
-        setIsProcessing(false)
         return
       }
 
@@ -89,10 +86,14 @@ export default function TitulosProcessor() {
       const summary = getMercadoSummary(operacionesParsed)
       const totalOps = Object.values(summary).reduce((sum, count) => sum + count, 0)
 
-      toast({
-        title: "Datos procesados exitosamente",
-        description: `Se procesaron ${totalOps} operaciones: BYMA(${summary.BYMA}), MAV(${summary.MAV}), MAE(${summary.MAE})`,
-      })
+      // Pequeña pausa para mostrar el 100% antes de cerrar
+      setTimeout(() => {
+        setShowProgress(false)
+        toast({
+          title: "Datos procesados exitosamente",
+          description: `Se procesaron ${totalOps} operaciones: BYMA(${summary.BYMA}), MAV(${summary.MAV}), MAE(${summary.MAE})`,
+        })
+      }, 500)
     } catch (error) {
       console.error("❌ Error procesando datos:", error)
       toast({
@@ -103,71 +104,16 @@ export default function TitulosProcessor() {
     } finally {
       setIsProcessing(false)
     }
-  }
+  }, [rawData, inputFormat, toast])
 
-  // Parser agresivo como último recurso
-  const parseAggressively = (rawData: string): TituloOperacion[] => {
-    console.log("🔄 Usando parser agresivo...")
-    const lines = rawData.trim().split(/\r\n|\r|\n/)
-    const operaciones: TituloOperacion[] = []
-
-    lines.forEach((line, index) => {
-      if (!line.trim()) return
-
-      // Buscar cualquier mención de mercado
-      const mercados = ["BYMA", "MAV", "MAE"]
-      let mercadoEncontrado = ""
-
-      for (const mercado of mercados) {
-        if (line.toUpperCase().includes(mercado)) {
-          mercadoEncontrado = mercado
-          break
-        }
-      }
-
-      if (!mercadoEncontrado) return
-
-      // Extraer nombre (primeras palabras hasta encontrar números)
-      const words = line.trim().split(/\s+/)
-      const nombreWords = []
-      let startOfNumbers = -1
-
-      for (let i = 0; i < words.length; i++) {
-        if (/^\d/.test(words[i]) || /E[+-]\d/.test(words[i])) {
-          startOfNumbers = i
-          break
-        }
-        nombreWords.push(words[i])
-      }
-
-      if (startOfNumbers === -1 || nombreWords.length === 0) return
-
-      const nombre = nombreWords.join(" ")
-      const numericParts = words.slice(startOfNumbers).filter((w) => w !== mercadoEncontrado)
-
-      if (numericParts.length >= 2) {
-        const operacion: TituloOperacion = {
-          denominacionCliente: nombre,
-          cuitCuil: numericParts[0] || "",
-          especie: numericParts.slice(1, -6).join(" ") || "N/A",
-          plazo: "0",
-          moneda: "Pesos",
-          cantidadComprada: numericParts[numericParts.length - 6] || "0",
-          precioPromedioCompra: numericParts[numericParts.length - 5] || "0",
-          montoComprado: numericParts[numericParts.length - 4] || "0",
-          cantidadVendida: numericParts[numericParts.length - 3] || "0",
-          precioPromedioVenta: numericParts[numericParts.length - 2] || "0",
-          montoVendido: numericParts[numericParts.length - 1] || "0",
-          mercado: mercadoEncontrado,
-        }
-
-        operaciones.push(operacion)
-        console.log(`✅ Operación parseada agresivamente: ${nombre} - ${mercadoEncontrado}`)
-      }
-    })
-
-    return operaciones
-  }
+  const [showProgress, setShowProgress] = useState(false)
+  const [progress, setProgress] = useState<ProcessingProgress>({
+    processed: 0,
+    total: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    currentStep: "",
+  })
 
   // Generar archivos Excel
   const generarExcel = async () => {
@@ -228,9 +174,18 @@ export default function TitulosProcessor() {
     })
   }
 
-  // Obtener resumen por mercado
-  const mercadoSummary = getMercadoSummary(operaciones)
-  const totalOperaciones = Object.values(mercadoSummary).reduce((sum, count) => sum + count, 0)
+  // Memoizar el resumen por mercado:
+  const mercadoSummary = useMemo(() => getMercadoSummary(operaciones), [operaciones])
+  const totalOperaciones = useMemo(
+    () => Object.values(mercadoSummary).reduce((sum, count) => sum + count, 0),
+    [mercadoSummary],
+  )
+
+  // Memoizar el cálculo de progreso:
+  const progressPercentage = useMemo(() => {
+    if (progress.total === 0) return 0
+    return Math.round((progress.processed / progress.total) * 100)
+  }, [progress.processed, progress.total])
 
   // Ejemplo de formato mejorado
   const ejemploFormato = `SUCIC, MICAELA ELIANA 2,73E+10 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 BYMA
@@ -349,7 +304,11 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
             <CardTitle>📋 Vista Previa de Datos</CardTitle>
           </CardHeader>
           <CardContent>
-            <TitulosTable operaciones={operaciones} filtroMercado={filtroMercado} onFiltroChange={setFiltroMercado} />
+            <VirtualizedTitulosTable
+              operaciones={operaciones}
+              filtroMercado={filtroMercado}
+              onFiltroChange={setFiltroMercado}
+            />
           </CardContent>
         </Card>
       )}
@@ -406,6 +365,15 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de Progreso */}
+      <ProgressModal
+        isOpen={showProgress}
+        progress={progressPercentage}
+        currentStep={progress.currentStep}
+        processedItems={progress.processed}
+        totalItems={progress.total}
+      />
 
       {/* Modal de Previsualización de Emails */}
       <EmailPreviewModal
