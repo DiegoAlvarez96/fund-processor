@@ -1,12 +1,16 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import type React from "react"
+
+import { useState, useCallback, useMemo, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { FileSpreadsheet, Mail, Trash2, FileText, TrendingUp, AlertCircle, Info, Send } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { FileSpreadsheet, Mail, Trash2, TrendingUp, AlertCircle, Info, Send, Upload, FileUp, Type } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { TituloOperacion } from "@/lib/titulos-parser"
 import {
@@ -15,13 +19,17 @@ import {
   detectInputFormat,
   type ProcessingProgress,
 } from "@/lib/titulos-parser"
+import { readTitulosFromExcel, validateExcelFile, detectExcelStructure } from "@/lib/titulos-excel-reader"
 import { generateAllTitulosExcel, getFileName } from "@/lib/titulos-excel"
 import { MERCADO_CONFIG } from "@/lib/titulos-config"
 import PaginatedTitulosTable from "./PaginatedTitulosTable"
 import EmailPreviewModal from "./EmailPreviewModal"
 import ProgressModal from "@/components/ui/progress-modal"
 
+type InputMethod = "text" | "excel"
+
 export default function TitulosProcessor() {
+  const [inputMethod, setInputMethod] = useState<InputMethod>("text")
   const [rawData, setRawData] = useState("")
   const [operaciones, setOperaciones] = useState<TituloOperacion[]>([])
   const [filtroMercado, setFiltroMercado] = useState("todos")
@@ -30,6 +38,16 @@ export default function TitulosProcessor() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [inputFormat, setInputFormat] = useState("")
 
+  // Estados para carga de Excel
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileStructure, setFileStructure] = useState<{
+    hasHeaders: boolean
+    columnCount: number
+    rowCount: number
+    sampleData: string[][]
+  } | null>(null)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   // Estados para el modal de progreso
@@ -42,7 +60,7 @@ export default function TitulosProcessor() {
     currentStep: "",
   })
 
-  // Detectar formato cuando cambian los datos
+  // Detectar formato cuando cambian los datos de texto
   const handleDataChange = (value: string) => {
     setRawData(value)
     if (value.trim()) {
@@ -53,8 +71,49 @@ export default function TitulosProcessor() {
     }
   }
 
-  // Procesar datos con lotes y barra de progreso (memoizado)
-  const procesarDatos = useCallback(async () => {
+  // Manejar selección de archivo Excel
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    console.log("📁 Archivo seleccionado:", file.name)
+
+    // Validar archivo
+    const validation = validateExcelFile(file)
+    if (!validation.valid) {
+      toast({
+        title: "Archivo no válido",
+        description: validation.error,
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSelectedFile(file)
+
+    try {
+      // Detectar estructura del archivo
+      const structure = await detectExcelStructure(file)
+      setFileStructure(structure)
+
+      console.log("📊 Estructura detectada:", structure)
+
+      toast({
+        title: "Archivo cargado",
+        description: `${file.name} - ${structure.rowCount} filas, ${structure.columnCount} columnas`,
+      })
+    } catch (error) {
+      console.error("❌ Error analizando archivo:", error)
+      toast({
+        title: "Error al analizar archivo",
+        description: "No se pudo analizar la estructura del archivo",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Procesar datos desde texto (método existente)
+  const procesarDatosTexto = useCallback(async () => {
     if (!rawData.trim()) {
       toast({
         title: "Sin datos",
@@ -69,34 +128,31 @@ export default function TitulosProcessor() {
     setProgress({ processed: 0, total: 0, currentBatch: 0, totalBatches: 0, currentStep: "Iniciando..." })
 
     try {
-      console.log("🔄 Iniciando procesamiento por lotes...")
-      console.log("📊 Formato detectado:", inputFormat)
+      console.log("🔄 Procesando datos de texto...")
 
       const operacionesParsed = await parseTitulosDataBatched(
         rawData,
         (progressData: ProcessingProgress) => {
           setProgress(progressData)
         },
-        150, // Tamaño de lote optimizado
+        150,
       )
 
       if (operacionesParsed.length === 0) {
         toast({
           title: "Sin operaciones válidas",
-          description:
-            "No se pudieron procesar los datos. Verifique que cada línea tenga exactamente 12 columnas y termine con BYMA, MAV o MAE.",
+          description: "No se pudieron procesar los datos. Verifique el formato.",
           variant: "destructive",
         })
         return
       }
 
       setOperaciones(operacionesParsed)
-      setExcelFiles({}) // Limpiar archivos anteriores
+      setExcelFiles({})
 
       const summary = getMercadoSummary(operacionesParsed)
       const totalOps = Object.values(summary).reduce((sum, count) => sum + count, 0)
 
-      // Pequeña pausa para mostrar el 100% antes de cerrar
       setTimeout(() => {
         setShowProgress(false)
         toast({
@@ -114,7 +170,70 @@ export default function TitulosProcessor() {
     } finally {
       setIsProcessing(false)
     }
-  }, [rawData, inputFormat, toast])
+  }, [rawData, toast])
+
+  // Procesar datos desde Excel
+  const procesarDatosExcel = useCallback(async () => {
+    if (!selectedFile) {
+      toast({
+        title: "Sin archivo",
+        description: "Seleccione un archivo Excel para procesar",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsProcessing(true)
+    setShowProgress(true)
+    setProgress({ processed: 0, total: 0, currentBatch: 0, totalBatches: 0, currentStep: "Leyendo archivo Excel..." })
+
+    try {
+      console.log("📊 Procesando archivo Excel:", selectedFile.name)
+
+      const operacionesParsed = await readTitulosFromExcel(selectedFile)
+
+      if (operacionesParsed.length === 0) {
+        toast({
+          title: "Sin operaciones válidas",
+          description: "No se encontraron operaciones válidas en el archivo Excel",
+          variant: "destructive",
+        })
+        return
+      }
+
+      setOperaciones(operacionesParsed)
+      setExcelFiles({})
+
+      const summary = getMercadoSummary(operacionesParsed)
+      const totalOps = Object.values(summary).reduce((sum, count) => sum + count, 0)
+
+      setTimeout(() => {
+        setShowProgress(false)
+        toast({
+          title: "Excel procesado exitosamente",
+          description: `Se procesaron ${totalOps} operaciones: BYMA(${summary.BYMA}), MAV(${summary.MAV}), MAE(${summary.MAE})`,
+        })
+      }, 500)
+    } catch (error) {
+      console.error("❌ Error procesando Excel:", error)
+      toast({
+        title: "Error al procesar Excel",
+        description: "Ocurrió un error al procesar el archivo Excel",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [selectedFile, toast])
+
+  // Función unificada para procesar datos
+  const procesarDatos = () => {
+    if (inputMethod === "text") {
+      procesarDatosTexto()
+    } else {
+      procesarDatosExcel()
+    }
+  }
 
   // Generar archivos Excel
   const generarExcel = async () => {
@@ -224,8 +343,8 @@ Saludos`)
       })
 
       toast({
-        title: "Emails generados",
-        description: `Se abrieron ${mercadosConDatos.length} emails en Outlook con sus archivos adjuntos`,
+        title: "Emails y archivos preparados",
+        description: `Se abrieron ${mercadosConDatos.length} emails en Outlook y se descargaron los archivos Excel. Adjunte manualmente los archivos descargados.`,
       })
     }, 1000)
   }
@@ -237,10 +356,28 @@ Saludos`)
     setExcelFiles({})
     setFiltroMercado("todos")
     setInputFormat("")
+    setSelectedFile(null)
+    setFileStructure(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
     toast({
       title: "Datos limpiados",
       description: "Se eliminaron todos los datos y archivos",
     })
+  }
+
+  // Cambiar método de entrada
+  const handleInputMethodChange = (method: InputMethod) => {
+    setInputMethod(method)
+    // Limpiar datos del método anterior
+    setRawData("")
+    setSelectedFile(null)
+    setFileStructure(null)
+    setInputFormat("")
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   // Memoizar el resumen por mercado:
@@ -256,10 +393,10 @@ Saludos`)
     return Math.round((progress.processed / progress.total) * 100)
   }, [progress.processed, progress.total])
 
-  // Ejemplo de formato mejorado
-  const ejemploFormato = `MAMOGRAFIA DIGITAL SA 3,07E+10 B.E.GLOBALES U$S STEP UP 2035 1 Pesos 35868 837,794 30049995 0 0 0 MAV
-SUCIC, MICAELA ELIANA 2,73E+10 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 0 0 0 BYMA
-VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 0 0 0 MAE`
+  // Ejemplo de formato mejorado con campos vacíos
+  const ejemploFormato = `MAMOGRAFIA DIGITAL SA 27267948149 B.E.GLOBALES U$S STEP UP 2035 1 Pesos 35868 837,794 30049995 MAV
+SECAR SECURITY ARGENTINA SA 30711610126 0 Pesos 445000000 MAE
+SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 BYMA`
 
   return (
     <div className="space-y-6">
@@ -271,75 +408,247 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 0 0 0 MAE`
         <p className="text-gray-600">Procesador de Operaciones Diarias por Mercado</p>
       </div>
 
-      {/* Carga de Datos */}
+      {/* Selección de Método de Entrada */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Carga de Datos
+            <FileUp className="w-5 h-5" />
+            Método de Carga de Datos
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Información sobre formato detectado */}
-          {inputFormat && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Formato detectado: <strong>{inputFormat}</strong>
-                {inputFormat === "mixed" && " - Se usarán múltiples métodos de parsing"}
-              </AlertDescription>
-            </Alert>
-          )}
-
           <div>
-            <label className="block text-sm font-medium mb-2">Pegue aquí los datos de operaciones:</label>
-            <Textarea
-              value={rawData}
-              onChange={(e) => handleDataChange(e.target.value)}
-              placeholder={ejemploFormato}
-              rows={8}
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              💡 Tip: Cada línea debe tener exactamente 12 columnas separadas por espacios y terminar con BYMA, MAV o
-              MAE.
-            </p>
+            <Label>Seleccione cómo desea cargar los datos:</Label>
+            <Select value={inputMethod} onValueChange={handleInputMethodChange}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="text">
+                  <div className="flex items-center gap-2">
+                    <Type className="w-4 h-4" />
+                    <span>Pegar Texto (Copiar desde tabla)</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="excel">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>Cargar Archivo Excel (.xlsx, .xls, .csv)</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="flex gap-3">
-            <Button onClick={procesarDatos} disabled={isProcessing || !rawData.trim()}>
-              {isProcessing ? "🔄 Procesando..." : "🔄 Procesar Datos"}
-            </Button>
-            <Button variant="outline" onClick={() => handleDataChange("")} disabled={!rawData.trim()}>
-              🗑️ Limpiar
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard.writeText(ejemploFormato)
-                toast({ title: "Copiado", description: "Ejemplo copiado al portapapeles" })
-              }}
-            >
-              📋 Ejemplo de Formato
-            </Button>
-          </div>
-
-          {/* Ayuda para formatos */}
+          {/* Información sobre el método seleccionado */}
           <Alert>
-            <AlertCircle className="h-4 w-4" />
+            <Info className="h-4 w-4" />
             <AlertDescription>
-              <strong>Formato requerido (12 columnas):</strong>
-              <ul className="list-disc list-inside mt-1 text-sm">
-                <li>
-                  Cliente // CUIT // Especie // Plazo // Moneda // Cant.Comprada // Precio.Compra // Monto.Comprado //
-                  Cant.Vendida // Precio.Venta // Monto.Vendido // Mercado
-                </li>
-                <li>Cada línea debe terminar con BYMA, MAV o MAE</li>
-                <li>El CUIT puede estar en formato científico (ej: 3,07E+10)</li>
-                <li>La especie puede contener números (ej: "BONO 2030") - se mantendrá como un solo campo</li>
-              </ul>
+              {inputMethod === "text" ? (
+                <>
+                  <strong>Método Texto:</strong> Copie y pegue los datos directamente desde una tabla o reporte. Ideal
+                  para datos rápidos pero puede tener problemas con campos vacíos.
+                </>
+              ) : (
+                <>
+                  <strong>Método Excel:</strong> Cargue un archivo Excel con los datos estructurados. Más confiable para
+                  datos con campos vacíos y estructuras complejas.
+                </>
+              )}
             </AlertDescription>
           </Alert>
+        </CardContent>
+      </Card>
+
+      {/* Carga de Datos - Método Texto */}
+      {inputMethod === "text" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Type className="w-5 h-5" />
+              Carga de Datos por Texto
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Información sobre formato detectado */}
+            {inputFormat && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Formato detectado: <strong>{inputFormat}</strong>
+                  {inputFormat === "mixed" && " - Se usarán múltiples métodos de parsing"}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Pegue aquí los datos de operaciones:</label>
+              <Textarea
+                value={rawData}
+                onChange={(e) => handleDataChange(e.target.value)}
+                placeholder={ejemploFormato}
+                rows={8}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                💡 Tip: El sistema detecta automáticamente la estructura. Los campos vacíos se manejan correctamente.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(ejemploFormato)
+                  toast({ title: "Copiado", description: "Ejemplo copiado al portapapeles" })
+                }}
+              >
+                📋 Ejemplo de Formato
+              </Button>
+            </div>
+
+            {/* Ayuda para formatos */}
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Formatos soportados:</strong>
+                <ul className="list-disc list-inside mt-1 text-sm">
+                  <li>
+                    <strong>Estructura completa:</strong> Cliente CUIT Especie Plazo Moneda CantComprada PrecioCompra
+                    MontoComprado CantVendida PrecioVenta MontoVendido Mercado
+                  </li>
+                  <li>
+                    <strong>Estructura simplificada:</strong> Cliente CUIT Plazo Moneda Cantidad Mercado
+                  </li>
+                  <li>
+                    <strong>Campos vacíos:</strong> Se detectan automáticamente y se rellenan con "0" o valores por
+                    defecto
+                  </li>
+                  <li>
+                    Cada línea debe terminar con <strong>BYMA</strong>, <strong>MAV</strong> o <strong>MAE</strong>
+                  </li>
+                  <li>El CUIT puede estar en formato numérico (27267948149) o científico (3,07E+10)</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Carga de Datos - Método Excel */}
+      {inputMethod === "excel" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" />
+              Carga de Datos por Excel
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Seleccione archivo Excel:</label>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  Seleccionar Archivo
+                </Button>
+                {selectedFile && (
+                  <Badge variant="outline" className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-3 h-3" />
+                    {selectedFile.name}
+                  </Badge>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <p className="text-xs text-gray-500 mt-1">💡 Formatos soportados: .xlsx, .xls, .csv (máximo 10MB)</p>
+            </div>
+
+            {/* Información del archivo seleccionado */}
+            {fileStructure && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Estructura detectada:</strong>
+                  <ul className="list-disc list-inside mt-1 text-sm">
+                    <li>{fileStructure.rowCount} filas de datos</li>
+                    <li>{fileStructure.columnCount} columnas</li>
+                    <li>
+                      {fileStructure.hasHeaders
+                        ? "Con headers detectados"
+                        : "Sin headers (se asume estructura estándar)"}
+                    </li>
+                  </ul>
+                  {fileStructure.sampleData.length > 0 && (
+                    <div className="mt-2">
+                      <strong>Vista previa:</strong>
+                      <div className="bg-gray-50 p-2 rounded mt-1 font-mono text-xs">
+                        {fileStructure.sampleData.slice(0, 3).map((row, i) => (
+                          <div key={i}>{row.slice(0, 6).join(" | ")}...</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Ayuda para Excel */}
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Estructura esperada del Excel:</strong>
+                <ul className="list-disc list-inside mt-1 text-sm">
+                  <li>
+                    <strong>Con headers:</strong> El sistema detecta automáticamente las columnas por nombre
+                  </li>
+                  <li>
+                    <strong>Sin headers:</strong> Se asume orden estándar: Cliente, CUIT, Especie, Plazo, Moneda, etc.
+                  </li>
+                  <li>
+                    <strong>Campos vacíos:</strong> Se manejan correctamente y se rellenan con valores por defecto
+                  </li>
+                  <li>
+                    <strong>Mercado:</strong> Debe estar en una columna o detectarse en el texto (BYMA, MAV, MAE)
+                  </li>
+                  <li>
+                    <strong>CUIT:</strong> Se maneja formato científico automáticamente
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Botón de Procesamiento */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-3">
+            <Button
+              onClick={procesarDatos}
+              disabled={
+                isProcessing ||
+                (inputMethod === "text" && !rawData.trim()) ||
+                (inputMethod === "excel" && !selectedFile)
+              }
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isProcessing ? "🔄 Procesando..." : "🔄 Procesar Datos"}
+            </Button>
+            <Button variant="outline" onClick={limpiarTodo}>
+              🗑️ Limpiar Todo
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -423,6 +732,10 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 0 0 0 MAE`
                 <p className="text-green-600 text-sm mt-2">
                   ✅ Listos para enviar. Use "Generar Emails" para envío directo o "Previsualizar Emails" para editar
                   antes de enviar.
+                </p>
+                <p className="text-orange-600 text-xs mt-1">
+                  📎 Nota: Los archivos Excel se descargarán automáticamente y deberás adjuntarlos manualmente en
+                  Outlook por seguridad del navegador.
                 </p>
               </div>
             )}
