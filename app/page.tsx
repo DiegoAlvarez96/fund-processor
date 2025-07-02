@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils"
 import FundProcessor from "@/components/sections/FundProcessor"
 import BankFiles from "@/components/sections/bank-file-processor"
 import Dashboard from "@/components/sections/Dashboard"
+// Importar el nuevo componente
+import TitulosProcessor from "@/components/sections/TitulosProcessor"
 
 // Configuración de timeout (en minutos)
 const SESSION_TIMEOUT_MINUTES = 30
@@ -65,6 +67,19 @@ const menuItems: MenuItem[] = [
         label: "Reportes de Fondos",
         icon: <FileText className="w-4 h-4" />,
         // component: ReportesFondos, // Por implementar
+      },
+    ],
+  },
+  {
+    id: "titulos",
+    label: "Gestión de Títulos",
+    icon: <TrendingUp className="w-4 h-4" />,
+    children: [
+      {
+        id: "procesador-titulos",
+        label: "Procesador de Títulos",
+        icon: <FileText className="w-4 h-4" />,
+        component: TitulosProcessor,
       },
     ],
   },
@@ -118,7 +133,7 @@ export default function MainApp() {
   // Estados para el menú lateral
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [activeSection, setActiveSection] = useState("dashboard")
-  const [expandedItems, setExpandedItems] = useState<string[]>(["fondos"])
+  const [expandedItems, setExpandedItems] = useState<string[]>(["fondos", "titulos"])
 
   const { toast } = useToast()
 
@@ -379,7 +394,7 @@ export default function MainApp() {
               <Lock className="w-6 h-6 text-blue-600" />
             </div>
             <CardTitle className="text-2xl font-bold text-gray-900">ADCAP OPERACIONES</CardTitle>
-            <p className="text-gray-600">Sistema de Gestión</p>
+            <p className="text-gray-600">Sistema de Gestión Financiera</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -420,7 +435,7 @@ export default function MainApp() {
             </Button>
 
             <div className="text-center text-sm text-gray-500">
-              <p>Sistema de gestión financiera integral</p>
+              <p>Sistema de gestión</p>
               <p className="text-xs mt-1">Acceso autorizado únicamente</p>
               <p className="text-xs mt-1 text-blue-600">Sesión válida por {SESSION_TIMEOUT_MINUTES} minutos</p>
             </div>
@@ -467,7 +482,7 @@ export default function MainApp() {
                 variant="outline"
                 size="sm"
                 onClick={handleLogout}
-                className="w-full text-red-600 hover:text-red-800"
+                className="w-full text-red-600 hover:text-red-800 bg-transparent"
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Cerrar Sesión
