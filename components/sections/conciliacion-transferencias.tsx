@@ -125,6 +125,14 @@ export default function ConciliacionTransferencias() {
           : Promise.resolve({ movimientos: [], transferencias: [], mercados: [] }),
       ])
 
+      console.log("📊 Datos procesados:", {
+        statusOrdenes: statusData.length,
+        confirmaciones: confirmacionData.length,
+        recibos: recibosData.length,
+        movimientosPesos: movimientosPesosData.movimientos.length,
+        movimientosUSD: movimientosUSDData.movimientos.length,
+      })
+
       // Unir solicitudes de pago
       const solicitudesPago = crearSolicitudesPago(statusData, confirmacionData)
 
@@ -199,6 +207,11 @@ export default function ConciliacionTransferencias() {
   // Función para filtrar solicitudes
   const solicitudesFiltradas =
     resultadoConciliacion?.solicitudesPago.filter((solicitud) => {
+      // Debug: mostrar CUIT
+      if (solicitud.cuit) {
+        console.log(`🔍 Solicitud ${solicitud.id}: CUIT=${solicitud.cuit}, Comitente=${solicitud.comitenteNumero}`)
+      }
+
       // Filtro por estado de conciliación
       if (filtroSolicitudes === "conciliados" && (!solicitud.conciliadoRecibos || !solicitud.conciliadoMovimientos)) {
         return false
