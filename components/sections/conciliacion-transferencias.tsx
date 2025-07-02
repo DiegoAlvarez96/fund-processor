@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Trash2,
   RefreshCw,
+  Download,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ResultadoConciliacion } from "@/lib/conciliacion-types"
@@ -35,6 +36,7 @@ import {
   crearSolicitudesPago,
   realizarConciliacion,
 } from "@/lib/conciliacion-parser"
+import { exportarConciliacionExcel } from "@/lib/conciliacion-excel-export"
 
 export default function ConciliacionTransferencias() {
   const { toast } = useToast()
@@ -111,6 +113,33 @@ export default function ConciliacionTransferencias() {
     setProgressCurrent(current)
     setProgressTotal(total)
     setProgressMessage(message)
+  }
+
+  // Función para exportar resultados a Excel
+  const exportarResultados = () => {
+    if (!resultadoConciliacion) {
+      toast({
+        title: "No hay datos para exportar",
+        description: "Debe procesar la conciliación primero",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      exportarConciliacionExcel(resultadoConciliacion)
+      toast({
+        title: "Exportación exitosa",
+        description: "El archivo Excel se ha descargado correctamente",
+      })
+    } catch (error) {
+      console.error("Error exportando:", error)
+      toast({
+        title: "Error en la exportación",
+        description: "No se pudo generar el archivo Excel",
+        variant: "destructive",
+      })
+    }
   }
 
   // Función principal para procesar todos los archivos
@@ -236,11 +265,6 @@ export default function ConciliacionTransferencias() {
   // Función para filtrar solicitudes
   const solicitudesFiltradas =
     resultadoConciliacion?.solicitudesPago.filter((solicitud) => {
-      // Debug: mostrar CUIT
-      if (solicitud.cuit) {
-        console.log(`🔍 Solicitud ${solicitud.id}: CUIT=${solicitud.cuit}, Comitente=${solicitud.comitenteNumero}`)
-      }
-
       // Filtro por estado de conciliación
       if (filtroSolicitudes === "conciliados" && (!solicitud.conciliadoRecibos || !solicitud.conciliadoMovimientos)) {
         return false
@@ -311,7 +335,7 @@ export default function ConciliacionTransferencias() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
           <BarChart3 className="w-8 h-8" />
-          Conciliación de Transferencias
+          Conciliación TR VALO
         </h1>
         <p className="text-gray-600">Sistema de conciliación entre solicitudes, recibos y movimientos bancarios</p>
       </div>
@@ -454,8 +478,9 @@ export default function ConciliacionTransferencias() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Archivos requeridos:</strong> Los primeros 4 archivos son obligatorios. El archivo de Movimientos
-              USD es opcional pero recomendado para conciliación completa.
+              <strong>Detección automática:</strong> El sistema detectará automáticamente las columnas por nombre. Sin
+              headers se asumirá orden estándar. Los campos vacíos se manejarán correctamente. El CUIT puede estar en
+              formato numérico o científico (se convertirá automáticamente).
             </AlertDescription>
           </Alert>
 
@@ -479,6 +504,13 @@ export default function ConciliacionTransferencias() {
                 </>
               )}
             </Button>
+
+            {resultadoConciliacion && (
+              <Button onClick={exportarResultados} className="bg-green-600 hover:bg-green-700">
+                <Download className="w-4 h-4 mr-2" />
+                Exportar a Excel
+              </Button>
+            )}
 
             <Button variant="destructive" onClick={limpiarTodo}>
               <Trash2 className="w-4 h-4 mr-2" />
