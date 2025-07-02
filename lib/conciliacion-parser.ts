@@ -142,6 +142,21 @@ function buscarColumna(headers: string[], nombres: string[]): number {
   return -1
 }
 
+// Función para verificar si un beneficiario es de mercados
+function esBeneficiarioMercado(beneficiario: string): boolean {
+  const beneficiarioUpper = beneficiario.toUpperCase()
+
+  const patronesMercados = [
+    "MATBA ROFEX SA/A3 MERCADO SA",
+    "S.A. BOLSAS Y MERCADOS AR",
+    "BYMA S.A. BOLSAS Y MERCADOS AR",
+    "MERCADO ARGENTINO DE VALORES",
+    "MAE",
+  ]
+
+  return patronesMercados.some((patron) => beneficiarioUpper.includes(patron))
+}
+
 // Función optimizada para buscar CUIT con cache y lotes
 async function buscarCuitOptimizado(
   comitenteNumero: string,
@@ -260,7 +275,8 @@ export async function parseStatusOrdenesPago(
         ])
         const colMoneda = buscarColumna(headers, ["moneda"])
         const colImporte = buscarColumna(headers, ["importe"])
-        const colCuit = buscarColumna(headers, ["cuit"])
+        // Buscar columna CUIT/CUIL con mayor flexibilidad
+        const colCuit = buscarColumna(headers, ["cuit / cuil", "cuit/cuil", "cuit", "cuil"])
         const colEstado = buscarColumna(headers, ["estado"])
 
         console.log("Índices Status Órdenes:", {
@@ -306,8 +322,12 @@ export async function parseStatusOrdenesPago(
           }
         }
 
-        // Segunda pasada: buscar CUITs faltantes de forma optimizada
-        await procesarCuitsEnLotes(resultados, onProgress)
+        // Segunda pasada: buscar CUITs faltantes SOLO para registros sin CUIT
+        const registrosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
+        if (registrosSinCuit.length > 0) {
+          console.log(`🔍 Buscando CUITs para ${registrosSinCuit.length} registros sin CUIT...`)
+          await procesarCuitsEnLotes(registrosSinCuit, onProgress)
+        }
 
         console.log(`✅ Status Órdenes de Pago procesadas: ${resultados.length}`)
         resolve(resultados)
@@ -523,8 +543,12 @@ export async function parseRecibosPago(
           }
         }
 
-        // Segunda pasada: buscar CUITs faltantes de forma optimizada
-        await procesarCuitsEnLotes(resultados, onProgress)
+        // Segunda pasada: buscar CUITs faltantes SOLO para registros sin CUIT
+        const recibosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
+        if (recibosSinCuit.length > 0) {
+          console.log(`🔍 Buscando CUITs para ${recibosSinCuit.length} recibos sin CUIT...`)
+          await procesarCuitsEnLotes(recibosSinCuit, onProgress)
+        }
 
         console.log(`✅ Recibos de Pago procesados: ${resultados.length}`)
         resolve(resultados)
@@ -618,8 +642,23 @@ export async function parseMovimientosBancarios(file: File): Promise<{
                 continue
               }
 
-              // Separar CUIT 30711610126 para transferencias monetarias
-              if (cuit === "30711610126") {
+              // Verificar si es beneficiario de mercados
+              if (cuit === "30711610126" && esBeneficiarioMercado(beneficiario)) {
+                mercados.push({
+                  id: `mercado-${Date.now()}-${i}`,
+                  fecha,
+                  beneficiario,
+                  cuit,
+                  dc,
+                  importe,
+                  moneda,
+                  datosOriginales,
+                })
+                continue
+              }
+
+              // Separar CUIT 30711610126 para transferencias monetarias (no mercados)
+              if (cuit === "30711610126" && !esBeneficiarioMercado(beneficiario)) {
                 transferencias.push({
                   id: `transferencia-${Date.now()}-${i}`,
                   fecha,
@@ -650,10 +689,10 @@ export async function parseMovimientosBancarios(file: File): Promise<{
 
             // Para transferencias monetarias y mercados, incluir tanto C como D
             if (cuit === "30711610126") {
-              // Si no es BYMA, es transferencia monetaria
-              if (!beneficiario.includes("BYMA S.A. BOLSAS Y MERCADOS AR")) {
-                transferencias.push({
-                  id: `transferencia-${Date.now()}-${i}`,
+              // Verificar si es beneficiario de mercados
+              if (esBeneficiarioMercado(beneficiario)) {
+                mercados.push({
+                  id: `mercado-${Date.now()}-${i}`,
                   fecha,
                   beneficiario,
                   cuit,
@@ -663,9 +702,9 @@ export async function parseMovimientosBancarios(file: File): Promise<{
                   datosOriginales,
                 })
               } else {
-                // Si es BYMA, es mercado
-                mercados.push({
-                  id: `mercado-${Date.now()}-${i}`,
+                // Si no es mercado, es transferencia monetaria
+                transferencias.push({
+                  id: `transferencia-${Date.now()}-${i}`,
                   fecha,
                   beneficiario,
                   cuit,
