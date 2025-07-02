@@ -19,16 +19,20 @@ export async function readTitulosFromExcel(file: File): Promise<TituloOperacion[
 
         console.log("📋 Hoja encontrada:", sheetName)
 
-        // Convertir a JSON con headers
+        // Convertir a JSON manteniendo estructura original
         const jsonData = XLSX.utils.sheet_to_json(worksheet, {
           header: 1, // Usar índices numéricos
           defval: "", // Valor por defecto para celdas vacías
+          raw: false, // No usar valores raw, convertir a string
         }) as string[][]
 
-        console.log("📊 Datos JSON extraídos:", jsonData.length, "filas")
-        console.log("📋 Primeras 3 filas:", jsonData.slice(0, 3))
+        console.log("📊 Datos extraídos:", jsonData.length, "filas")
+        console.log("📋 Estructura completa:")
+        jsonData.slice(0, 5).forEach((row, i) => {
+          console.log(`Fila ${i + 1}:`, row)
+        })
 
-        const operaciones = parseExcelData(jsonData)
+        const operaciones = parseExcelDataSimple(jsonData)
         console.log("✅ Operaciones procesadas:", operaciones.length)
 
         resolve(operaciones)
@@ -46,221 +50,231 @@ export async function readTitulosFromExcel(file: File): Promise<TituloOperacion[
   })
 }
 
-// Función para parsear datos de Excel con estructura conocida
-function parseExcelData(data: string[][]): TituloOperacion[] {
+// Parser simplificado que lee por posición de columna
+function parseExcelDataSimple(data: string[][]): TituloOperacion[] {
   const operaciones: TituloOperacion[] = []
 
-  // Buscar la fila de headers para determinar la estructura
-  let headerRowIndex = -1
-  let columnMapping: Record<string, number> = {}
+  console.log("🔄 Iniciando parser simple por posición de columnas")
 
-  // Buscar headers conocidos
-  for (let i = 0; i < Math.min(10, data.length); i++) {
+  // Buscar donde empiezan los datos (saltar headers)
+  let startRow = 0
+  for (let i = 0; i < Math.min(5, data.length); i++) {
     const row = data[i]
     if (row && row.length > 0) {
-      const rowText = row.join(" ").toLowerCase()
+      const firstCell = row[0]?.toString().toLowerCase() || ""
 
-      // Buscar indicadores de header
-      if (
-        rowText.includes("denominación") ||
-        rowText.includes("cliente") ||
-        rowText.includes("cuit") ||
-        rowText.includes("especie")
-      ) {
-        headerRowIndex = i
-        columnMapping = createColumnMapping(row)
-        console.log("📋 Headers encontrados en fila", i + 1, ":", row)
-        console.log("🗂️ Mapeo de columnas:", columnMapping)
+      // Si la primera celda contiene "denominación", "cliente" o similar, es header
+      if (firstCell.includes("denominación") || firstCell.includes("cliente")) {
+        startRow = i + 1
+        console.log(`📋 Header detectado en fila ${i + 1}, datos empiezan en fila ${startRow + 1}`)
+        break
+      }
+
+      // Si la primera celda parece un nombre (más de 3 caracteres, no es header), empezar aquí
+      if (firstCell.length > 3 && !firstCell.includes("denominación")) {
+        startRow = i
+        console.log(`📋 Datos detectados desde fila ${startRow + 1}`)
         break
       }
     }
   }
 
-  // Si no encontramos headers, asumir estructura estándar
-  if (headerRowIndex === -1) {
-    console.log("⚠️ No se encontraron headers, asumiendo estructura estándar")
-    columnMapping = createStandardMapping()
-    headerRowIndex = 0 // Empezar desde la primera fila
-  }
+  console.log(`🔄 Procesando desde fila ${startRow + 1}`)
 
-  // Procesar filas de datos
-  const startRow = headerRowIndex + 1
+  // Procesar cada fila de datos
   for (let i = startRow; i < data.length; i++) {
     const row = data[i]
 
-    if (!row || row.length === 0) continue
+    // Saltar filas vacías
+    if (!row || row.length === 0) {
+      console.log(`⚠️ Fila ${i + 1}: vacía, saltando`)
+      continue
+    }
 
-    // Verificar que la fila tenga datos válidos
-    const hasData = row.some((cell) => cell && cell.toString().trim())
-    if (!hasData) continue
+    // Verificar que tenga datos mínimos
+    const hasValidData = row.some((cell) => cell && cell.toString().trim().length > 0)
+    if (!hasValidData) {
+      console.log(`⚠️ Fila ${i + 1}: sin datos válidos, saltando`)
+      continue
+    }
 
     try {
-      const operacion = parseExcelRow(row, columnMapping, i + 1)
+      console.log(`🔍 Procesando fila ${i + 1}:`, row)
+
+      const operacion = parseRowByPosition(row, i + 1)
       if (operacion) {
         operaciones.push(operacion)
-        console.log(`✅ Fila ${i + 1} procesada:`, operacion.denominacionCliente, "-", operacion.mercado)
+        console.log(`✅ Fila ${i + 1} procesada: ${operacion.denominacionCliente} - ${operacion.mercado}`)
+      } else {
+        console.log(`⚠️ Fila ${i + 1}: no se pudo procesar`)
       }
     } catch (error) {
-      console.warn(`⚠️ Error procesando fila ${i + 1}:`, error)
+      console.error(`❌ Error procesando fila ${i + 1}:`, error)
     }
   }
 
+  console.log(`✅ Total operaciones procesadas: ${operaciones.length}`)
   return operaciones
 }
 
-// Crear mapeo de columnas basado en headers encontrados
-function createColumnMapping(headers: string[]): Record<string, number> {
-  const mapping: Record<string, number> = {}
+// Parser por posición fija de columnas
+function parseRowByPosition(row: string[], rowNumber: number): TituloOperacion | null {
+  console.log(`🔍 Parseando fila ${rowNumber} por posición:`, row)
 
-  headers.forEach((header, index) => {
-    if (!header) return
-
-    const headerLower = header.toString().toLowerCase().trim()
-
-    // Mapear headers conocidos
-    if (headerLower.includes("denominación") || headerLower.includes("cliente")) {
-      mapping.denominacionCliente = index
-    } else if (headerLower.includes("cuit") || headerLower.includes("cuil")) {
-      mapping.cuitCuil = index
-    } else if (headerLower.includes("especie")) {
-      mapping.especie = index
-    } else if (headerLower.includes("plazo")) {
-      mapping.plazo = index
-    } else if (headerLower.includes("moneda")) {
-      mapping.moneda = index
-    } else if (headerLower.includes("cantidad") && headerLower.includes("compra")) {
-      mapping.cantidadComprada = index
-    } else if (headerLower.includes("precio") && headerLower.includes("compra")) {
-      mapping.precioPromedioCompra = index
-    } else if (headerLower.includes("monto") && headerLower.includes("compra")) {
-      mapping.montoComprado = index
-    } else if (headerLower.includes("cantidad") && headerLower.includes("vend")) {
-      mapping.cantidadVendida = index
-    } else if (headerLower.includes("precio") && headerLower.includes("vend")) {
-      mapping.precioPromedioVenta = index
-    } else if (headerLower.includes("monto") && headerLower.includes("vend")) {
-      mapping.montoVendido = index
-    } else if (headerLower.includes("mercado")) {
-      mapping.mercado = index
+  // Función helper para obtener celda por índice
+  const getCell = (index: number, defaultValue = ""): string => {
+    if (index >= row.length) {
+      console.log(`⚠️ Columna ${index} no existe, usando default: "${defaultValue}"`)
+      return defaultValue
     }
-  })
-
-  return mapping
-}
-
-// Crear mapeo estándar cuando no hay headers
-function createStandardMapping(): Record<string, number> {
-  return {
-    denominacionCliente: 0,
-    cuitCuil: 1,
-    especie: 2,
-    plazo: 3,
-    moneda: 4,
-    cantidadComprada: 5,
-    precioPromedioCompra: 6,
-    montoComprado: 7,
-    cantidadVendida: 8,
-    precioPromedioVenta: 9,
-    montoVendido: 10,
-    mercado: 11,
+    const value = row[index]
+    const result = value ? value.toString().trim() : defaultValue
+    console.log(`📋 Columna ${index}: "${result}"`)
+    return result
   }
-}
 
-// Parsear una fila individual del Excel
-function parseExcelRow(row: string[], mapping: Record<string, number>, rowNumber: number): TituloOperacion | null {
-  try {
-    // Función helper para obtener valor de celda
-    const getCell = (key: string): string => {
-      const index = mapping[key]
-      if (index === undefined || index >= row.length) return ""
-      const value = row[index]
-      return value ? value.toString().trim() : ""
-    }
+  // Mapeo por posición estándar (basado en tu imagen):
+  // 0: Denominación Cliente
+  // 1: CUIT/CUIL
+  // 2: Especie
+  // 3: Plazo
+  // 4: Moneda
+  // 5: Cantidad Comprada
+  // 6: Precio Promedio Compra
+  // 7: Monto Comprado
+  // 8: Cantidad Vendida
+  // 9: Precio Promedio Venta
+  // 10: Monto Vendido
+  // 11: Mercado
 
-    // Extraer datos básicos
-    const denominacionCliente = getCell("denominacionCliente")
-    const cuitCuil = getCell("cuitCuil")
-    const mercado = getCell("mercado").toUpperCase()
+  const denominacionCliente = getCell(0, "Sin nombre")
+  const cuitCuil = formatCuit(getCell(1, ""))
+  const especie = getCell(2, "")
+  const plazo = getCell(3, "0")
+  const moneda = getCell(4, "Pesos")
+  const cantidadComprada = formatNumber(getCell(5, "0"))
+  const precioPromedioCompra = formatNumber(getCell(6, "0"))
+  const montoComprado = formatNumber(getCell(7, "0"))
+  const cantidadVendida = formatNumber(getCell(8, "0"))
+  const precioPromedioVenta = formatNumber(getCell(9, "0"))
+  const montoVendido = formatNumber(getCell(10, "0"))
+  let mercado = getCell(11, "").toUpperCase()
 
-    // Validar datos mínimos requeridos
-    if (!denominacionCliente && !cuitCuil) {
-      console.warn(`⚠️ Fila ${rowNumber}: Sin cliente ni CUIT`)
-      return null
-    }
-
-    // Validar mercado
-    if (!["BYMA", "MAV", "MAE"].includes(mercado)) {
-      // Intentar detectar mercado en otras columnas
-      const allCells = row.join(" ").toUpperCase()
-      let detectedMercado = ""
-
-      if (allCells.includes("BYMA")) detectedMercado = "BYMA"
-      else if (allCells.includes("MAV")) detectedMercado = "MAV"
-      else if (allCells.includes("MAE")) detectedMercado = "MAE"
-
-      if (!detectedMercado) {
-        console.warn(`⚠️ Fila ${rowNumber}: Mercado no válido: "${mercado}"`)
-        return null
-      }
-    }
-
-    // Construir operación
-    const operacion: TituloOperacion = {
-      denominacionCliente: denominacionCliente || "Sin nombre",
-      cuitCuil: formatCuit(cuitCuil),
-      especie: getCell("especie") || "",
-      plazo: getCell("plazo") || "0",
-      moneda: getCell("moneda") || "Pesos",
-      cantidadComprada: formatNumber(getCell("cantidadComprada")),
-      precioPromedioCompra: formatNumber(getCell("precioPromedioCompra")),
-      montoComprado: formatNumber(getCell("montoComprado")),
-      cantidadVendida: formatNumber(getCell("cantidadVendida")),
-      precioPromedioVenta: formatNumber(getCell("precioPromedioVenta")),
-      montoVendido: formatNumber(getCell("montoVendido")),
-      mercado: mercado || "BYMA",
-    }
-
-    return operacion
-  } catch (error) {
-    console.error(`❌ Error parseando fila ${rowNumber}:`, error)
+  // Validaciones básicas
+  if (!denominacionCliente || denominacionCliente === "Sin nombre") {
+    console.warn(`⚠️ Fila ${rowNumber}: Sin nombre de cliente válido`)
     return null
   }
+
+  if (!cuitCuil || cuitCuil.length < 8) {
+    console.warn(`⚠️ Fila ${rowNumber}: CUIT no válido: "${cuitCuil}"`)
+    return null
+  }
+
+  // Detectar mercado si no está en la columna 11
+  if (!["BYMA", "MAV", "MAE"].includes(mercado)) {
+    // Buscar mercado en toda la fila
+    const allCells = row.join(" ").toUpperCase()
+    if (allCells.includes("BYMA")) mercado = "BYMA"
+    else if (allCells.includes("MAV")) mercado = "MAV"
+    else if (allCells.includes("MAE")) mercado = "MAE"
+    else {
+      console.warn(`⚠️ Fila ${rowNumber}: No se pudo detectar mercado, usando BYMA por defecto`)
+      mercado = "BYMA"
+    }
+  }
+
+  const operacion: TituloOperacion = {
+    denominacionCliente,
+    cuitCuil,
+    especie,
+    plazo,
+    moneda,
+    cantidadComprada,
+    precioPromedioCompra,
+    montoComprado,
+    cantidadVendida,
+    precioPromedioVenta,
+    montoVendido,
+    mercado,
+  }
+
+  console.log(`✅ Operación creada para fila ${rowNumber}:`, {
+    cliente: operacion.denominacionCliente,
+    cuit: operacion.cuitCuil,
+    mercado: operacion.mercado,
+    montoComprado: operacion.montoComprado,
+    montoVendido: operacion.montoVendido,
+  })
+
+  return operacion
 }
 
 // Formatear CUIT (manejar formato científico)
 function formatCuit(cuit: string): string {
   if (!cuit) return ""
 
-  // Si está en formato científico (ej: 3.07E+10)
+  console.log(`🔍 Formateando CUIT: "${cuit}"`)
+
+  // Si está en formato científico (ej: 3.07E+10, 2.09E+10)
   if (cuit.includes("E+") || cuit.includes("e+")) {
     try {
       const number = Number.parseFloat(cuit)
-      return Math.round(number).toString()
+      const result = Math.round(number).toString()
+      console.log(`✅ CUIT científico convertido: ${cuit} -> ${result}`)
+      return result
     } catch {
+      console.warn(`⚠️ Error convirtiendo CUIT científico: ${cuit}`)
       return cuit
     }
   }
 
-  return cuit.toString()
+  // Limpiar caracteres no numéricos excepto guiones
+  const cleaned = cuit.replace(/[^\d-]/g, "")
+  console.log(`✅ CUIT limpiado: ${cuit} -> ${cleaned}`)
+  return cleaned
 }
 
 // Formatear números (manejar decimales y comas)
 function formatNumber(value: string): string {
   if (!value) return "0"
 
-  // Limpiar el valor
+  console.log(`🔍 Formateando número: "${value}"`)
+
+  // Limpiar el valor - mantener solo dígitos, puntos, comas y signos
   const cleaned = value.toString().replace(/[^\d.,-]/g, "")
 
   if (!cleaned || cleaned === "-") return "0"
 
-  // Convertir comas a puntos para decimales
-  const normalized = cleaned.replace(",", ".")
+  // Si tiene coma como separador decimal (formato argentino: 1.234,56)
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    // Formato: 1.234,56 -> 1234.56
+    const parts = cleaned.split(",")
+    if (parts.length === 2) {
+      const integerPart = parts[0].replace(/\./g, "") // Remover puntos de miles
+      const decimalPart = parts[1]
+      const normalized = `${integerPart}.${decimalPart}`
+      const number = Number.parseFloat(normalized)
+      const result = isNaN(number) ? "0" : number.toString()
+      console.log(`✅ Número formato argentino: ${value} -> ${result}`)
+      return result
+    }
+  }
 
-  // Verificar si es un número válido
-  const number = Number.parseFloat(normalized)
-  if (isNaN(number)) return "0"
+  // Si solo tiene coma (puede ser decimal: 123,45)
+  if (cleaned.includes(",") && !cleaned.includes(".")) {
+    const normalized = cleaned.replace(",", ".")
+    const number = Number.parseFloat(normalized)
+    const result = isNaN(number) ? "0" : number.toString()
+    console.log(`✅ Número con coma decimal: ${value} -> ${result}`)
+    return result
+  }
 
-  return number.toString()
+  // Formato estándar con punto decimal
+  const number = Number.parseFloat(cleaned)
+  const result = isNaN(number) ? "0" : number.toString()
+  console.log(`✅ Número estándar: ${value} -> ${result}`)
+  return result
 }
 
 // Función para validar archivo Excel
@@ -308,6 +322,7 @@ export async function detectExcelStructure(file: File): Promise<{
         const jsonData = XLSX.utils.sheet_to_json(worksheet, {
           header: 1,
           defval: "",
+          raw: false,
         }) as string[][]
 
         // Analizar estructura
