@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Building2, ArrowRight } from "lucide-react"
+import { TrendingUp, Building2, ArrowRight, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export default function Dashboard() {
@@ -23,7 +23,7 @@ export default function Dashboard() {
       </div>
 
       {/* Accesos directos a módulos principales */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-4xl mx-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
         {/* Módulo de Gestión de Fondos */}
         <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-blue-300">
           <CardHeader className="text-center pb-4">
@@ -73,6 +73,35 @@ export default function Dashboard() {
               onClick={() => handleNavigation("archivos-bancos")}
             >
               Acceder a Archivos Bancarios
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Módulo de Conciliación TR VALO */}
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-purple-300">
+          <CardHeader className="text-center pb-4">
+            <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+              <BarChart3 className="w-8 h-8 text-purple-600" />
+            </div>
+            <CardTitle className="text-2xl text-gray-900">Conciliación TR VALO</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-gray-600 text-lg">
+              Sistema de conciliación entre solicitudes, recibos y movimientos bancarios
+            </p>
+            <ul className="text-sm text-gray-500 space-y-2">
+              <li>• Conciliación automática de transferencias</li>
+              <li>• Análisis de movimientos bancarios</li>
+              <li>• Separación de mercados y transferencias</li>
+              <li>• Exportación de resultados a Excel</li>
+              <li>• Detección automática de headers</li>
+            </ul>
+            <Button
+              className="w-full bg-purple-600 hover:bg-purple-700 text-lg py-6"
+              onClick={() => handleNavigation("conciliacion-transferencias")}
+            >
+              Acceder a Conciliación TR VALO
               <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
           </CardContent>
