@@ -442,7 +442,7 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
             </Select>
           </div>
 
-          {/* Información sobre el método seleccionado */}
+          {/* ✅ INFORMACIÓN ÚNICA SEGÚN EL MÉTODO SELECCIONADO */}
           <Alert className="border-blue-300 bg-blue-50">
             <Info className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
@@ -547,14 +547,6 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Alert className="border-blue-300 bg-blue-50">
-              <Info className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-800">
-                <strong>Método Excel:</strong> Cargue un archivo Excel con los datos estructurados. Más confiable para
-                datos con campos vacíos y estructuras complejas. ✅ <em>Funcionalidad activa</em>
-              </AlertDescription>
-            </Alert>
-
             <div>
               <label className="block text-sm font-medium mb-2">Seleccione archivo Excel:</label>
               <div className="flex items-center gap-3">
@@ -587,7 +579,7 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Estructura esperada del Excel (cuando esté disponible):</strong>
+                <strong>Estructura esperada del Excel:</strong>
                 <ul className="list-disc list-inside mt-1 text-sm">
                   <li>
                     <strong>Con headers:</strong> El sistema detectará automáticamente las columnas por nombre
