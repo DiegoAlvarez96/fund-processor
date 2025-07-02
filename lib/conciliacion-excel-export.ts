@@ -346,4 +346,189 @@ export function exportarConciliacionExcel(resultado: ResultadoConciliacion): voi
       { width: 30 }, // Tipo de Archivo
       { width: 15 }, // Cantidad
       { width: 20 }, // Importe Total
-      { width: 15 }, // Conc\
+      { width: 15 }, // Conc
+      { width: 15 }, // No Conc
+      { width: 12 }, // % Éxito
+      { width: 5 }, // Separador
+      { width: 5 }, // Separador
+    ]
+
+    // Agregar colores y formato a celdas específicas
+    if (!wsResumen["!merges"]) wsResumen["!merges"] = []
+
+    // Merge del título principal
+    wsResumen["!merges"].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } })
+
+    // Merge de secciones
+    wsResumen["!merges"].push({ s: { r: 2, c: 0 }, e: { r: 2, c: 2 } })
+    wsResumen["!merges"].push({ s: { r: 2, c: 3 }, e: { r: 2, c: 7 } })
+    wsResumen["!merges"].push({ s: { r: 9, c: 0 }, e: { r: 9, c: 7 } })
+    wsResumen["!merges"].push({ s: { r: 18, c: 0 }, e: { r: 18, c: 7 } })
+    wsResumen["!merges"].push({ s: { r: 25, c: 0 }, e: { r: 25, c: 7 } })
+
+    XLSX.utils.book_append_sheet(workbook, wsResumen, "Tablero Resumen")
+
+    // Crear hojas de datos detallados
+    const hojaSolicitudes = crearHojaSolicitudes(resultado.solicitudesPago)
+    const wsSolicitudes = XLSX.utils.aoa_to_sheet(hojaSolicitudes)
+    wsSolicitudes["!cols"] = [
+      { width: 25 }, // ID
+      { width: 12 }, // Fecha
+      { width: 15 }, // Comitente Número
+      { width: 40 }, // Comitente Descripción
+      { width: 10 }, // Moneda
+      { width: 15 }, // Importe
+      { width: 15 }, // CUIT
+      { width: 15 }, // Estado
+      { width: 12 }, // Origen
+      { width: 12 }, // Conc Recibos
+      { width: 12 }, // Conc Movimientos
+      { width: 20 }, // Estado General
+    ]
+    XLSX.utils.book_append_sheet(workbook, wsSolicitudes, "Solicitudes")
+
+    const hojaRecibos = crearHojaRecibos(resultado.recibosPago)
+    const wsRecibos = XLSX.utils.aoa_to_sheet(hojaRecibos)
+    wsRecibos["!cols"] = [
+      { width: 25 }, // ID
+      { width: 15 }, // Fecha Liquidación
+      { width: 15 }, // Comitente Número
+      { width: 40 }, // Comitente Denominación
+      { width: 15 }, // Importe
+      { width: 15 }, // CUIT
+      { width: 15 }, // Conc Solicitudes
+      { width: 15 }, // Conc Movimientos
+      { width: 20 }, // Estado General
+    ]
+    XLSX.utils.book_append_sheet(workbook, wsRecibos, "Recibos")
+
+    const hojaMovimientos = crearHojaMovimientos(resultado.movimientosBancarios)
+    const wsMovimientos = XLSX.utils.aoa_to_sheet(hojaMovimientos)
+    wsMovimientos["!cols"] = [
+      { width: 25 }, // ID
+      { width: 12 }, // Fecha
+      { width: 50 }, // Beneficiario
+      { width: 15 }, // CUIT
+      { width: 8 }, // D/C
+      { width: 15 }, // Importe
+      { width: 10 }, // Moneda
+      { width: 15 }, // Conc Solicitudes
+      { width: 15 }, // Conc Recibos
+      { width: 20 }, // Estado General
+    ]
+    XLSX.utils.book_append_sheet(workbook, wsMovimientos, "Mov Valores")
+
+    // Crear hoja de transferencias monetarias
+    if (resultado.transferenciasMonetarias.length > 0) {
+      const hojaTransferencias = [
+        ["ID", "Fecha", "Beneficiario", "CUIT", "D/C", "Importe", "Moneda"],
+        ...resultado.transferenciasMonetarias.map((t) => [
+          t.id,
+          t.fecha,
+          t.beneficiario,
+          t.cuit,
+          t.dc,
+          t.importe,
+          t.moneda,
+        ]),
+      ]
+      const wsTransferencias = XLSX.utils.aoa_to_sheet(hojaTransferencias)
+      wsTransferencias["!cols"] = [
+        { width: 25 }, // ID
+        { width: 12 }, // Fecha
+        { width: 50 }, // Beneficiario
+        { width: 15 }, // CUIT
+        { width: 8 }, // D/C
+        { width: 15 }, // Importe
+        { width: 10 }, // Moneda
+      ]
+      XLSX.utils.book_append_sheet(workbook, wsTransferencias, "Monetarias")
+    }
+
+    // Crear hoja de movimientos de mercados
+    if (resultado.movimientosMercados.length > 0) {
+      const hojaMercados = [
+        ["ID", "Fecha", "Beneficiario", "CUIT", "D/C", "Importe", "Moneda"],
+        ...resultado.movimientosMercados.map((m) => [m.id, m.fecha, m.beneficiario, m.cuit, m.dc, m.importe, m.moneda]),
+      ]
+      const wsMercados = XLSX.utils.aoa_to_sheet(hojaMercados)
+      wsMercados["!cols"] = [
+        { width: 25 }, // ID
+        { width: 12 }, // Fecha
+        { width: 50 }, // Beneficiario
+        { width: 15 }, // CUIT
+        { width: 8 }, // D/C
+        { width: 15 }, // Importe
+        { width: 10 }, // Moneda
+      ]
+      XLSX.utils.book_append_sheet(workbook, wsMercados, "Mercados")
+    }
+
+    // Generar archivo y descargar
+    const fechaHora = new Date().toISOString().slice(0, 19).replace(/[:-]/g, "").replace("T", "_")
+    const nombreArchivo = `Conciliacion_${fechaHora}.xlsx`
+
+    XLSX.writeFile(workbook, nombreArchivo)
+
+    console.log(`✅ Archivo Excel generado: ${nombreArchivo}`)
+  } catch (error) {
+    console.error("❌ Error generando archivo Excel:", error)
+    throw error
+  }
+}
+
+// Función para exportar a CSV
+export function exportarConciliacionCSV(resultado: ResultadoConciliacion): void {
+  try {
+    console.log("📊 Generando archivos CSV de conciliación...")
+
+    // Calcular resumen
+    const resumen = calcularResumen(resultado)
+
+    // Crear CSV de resumen
+    const csvResumen = [
+      ["Tipo", "Cantidad", "Importe Total", "Conciliados", "No Conciliados", "% Éxito"],
+      [
+        "Solicitudes",
+        resumen.solicitudes.cantidad,
+        resumen.solicitudes.importeTotal,
+        resumen.solicitudes.conciliados,
+        resumen.solicitudes.noConciliados,
+        ((resumen.solicitudes.conciliados / resumen.solicitudes.cantidad) * 100).toFixed(1) + "%",
+      ],
+      [
+        "Recibos",
+        resumen.recibos.cantidad,
+        resumen.recibos.importeTotal,
+        resumen.recibos.conciliados,
+        resumen.recibos.noConciliados,
+        ((resumen.recibos.conciliados / resumen.recibos.cantidad) * 100).toFixed(1) + "%",
+      ],
+      [
+        "Movimientos",
+        resumen.movimientos.cantidad,
+        resumen.movimientos.importeTotal,
+        resumen.movimientos.conciliados,
+        resumen.movimientos.noConciliados,
+        ((resumen.movimientos.conciliados / resumen.movimientos.cantidad) * 100).toFixed(1) + "%",
+      ],
+    ]
+
+    // Convertir a CSV y descargar
+    const csvContent = csvResumen.map((row) => row.join(",")).join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `Resumen_Conciliacion_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    console.log("✅ Archivo CSV de resumen generado")
+  } catch (error) {
+    console.error("❌ Error generando archivo CSV:", error)
+    throw error
+  }
+}
