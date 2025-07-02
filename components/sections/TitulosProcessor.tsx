@@ -28,7 +28,7 @@ import ProgressModal from "@/components/ui/progress-modal"
 type InputMethod = "text" | "excel"
 
 export default function TitulosProcessor() {
-  const [inputMethod, setInputMethod] = useState<InputMethod>("text")
+  const [inputMethod, setInputMethod] = useState<InputMethod>("excel")
   const [rawData, setRawData] = useState("")
   const [operaciones, setOperaciones] = useState<TituloOperacion[]>([])
   const [filtroMercado, setFiltroMercado] = useState("todos")
@@ -420,21 +420,21 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
                 <SelectValue placeholder="Seleccione método de entrada" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="text">
-                  <div className="flex items-center gap-3 py-2">
-                    <Type className="w-5 h-5 text-green-600" />
-                    <div>
-                      <div className="font-medium">Pegar Texto</div>
-                      <div className="text-xs text-gray-500">Copiar desde tabla o reporte</div>
-                    </div>
-                  </div>
-                </SelectItem>
                 <SelectItem value="excel">
                   <div className="flex items-center gap-3 py-2">
                     <FileSpreadsheet className="w-5 h-5 text-blue-600" />
                     <div>
                       <div className="font-medium">Cargar Archivo Excel</div>
                       <div className="text-xs text-gray-500">Subir archivo .xlsx, .xls o .csv</div>
+                    </div>
+                  </div>
+                </SelectItem>
+                <SelectItem value="text">
+                  <div className="flex items-center gap-3 py-2">
+                    <Type className="w-5 h-5 text-green-600" />
+                    <div>
+                      <div className="font-medium">Pegar Texto</div>
+                      <div className="text-xs text-gray-500">Copiar desde tabla o reporte</div>
                     </div>
                   </div>
                 </SelectItem>
