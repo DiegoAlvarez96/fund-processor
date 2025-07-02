@@ -1,5 +1,4 @@
-// Tipos para los diferentes archivos Excel
-
+// Tipos para Status Órdenes de Pago
 export interface StatusOrdenPago {
   fechaConcertacion: string
   comitenteNumero: string
@@ -8,10 +7,10 @@ export interface StatusOrdenPago {
   importe: number
   cuit: string
   estado: string
-  // Datos originales completos para el modal
-  datosOriginales?: Record<string, any>
+  datosOriginales: Record<string, any>
 }
 
+// Tipos para Confirmación de Solicitudes
 export interface ConfirmacionSolicitud {
   fecha: string
   estado: string
@@ -19,10 +18,10 @@ export interface ConfirmacionSolicitud {
   comitenteDenominacion: string
   monedaDescripcion: string
   importe: number
-  // Datos originales completos para el modal
-  datosOriginales?: Record<string, any>
+  datosOriginales: Record<string, any>
 }
 
+// Tipo unificado para Solicitudes de Pago
 export interface SolicitudPago {
   id: string
   fecha: string
@@ -33,13 +32,12 @@ export interface SolicitudPago {
   cuit: string
   estado: string
   origen: "status" | "confirmacion"
-  // Estados de conciliación
   conciliadoRecibos: boolean
   conciliadoMovimientos: boolean
-  // Datos originales para el modal
-  datosOriginales?: Record<string, any>
+  datosOriginales: Record<string, any>
 }
 
+// Tipos para Recibos de Pago
 export interface ReciboPago {
   id: string
   fechaLiquidacion: string
@@ -47,13 +45,12 @@ export interface ReciboPago {
   comitenteNumero: string
   importe: number
   cuit: string
-  // Estados de conciliación
   conciliadoSolicitudes: boolean
   conciliadoMovimientos: boolean
-  // Datos originales para el modal
-  datosOriginales?: Record<string, any>
+  datosOriginales: Record<string, any>
 }
 
+// Tipos para Movimientos Bancarios
 export interface MovimientoBancario {
   id: string
   fecha: string
@@ -61,14 +58,13 @@ export interface MovimientoBancario {
   cuit: string
   dc: string
   importe: number
-  moneda: string // Inferida del archivo (pesos/usd)
-  // Estados de conciliación
+  moneda: string
   conciliadoSolicitudes: boolean
   conciliadoRecibos: boolean
-  // Datos originales para el modal
-  datosOriginales?: Record<string, any>
+  datosOriginales: Record<string, any>
 }
 
+// Tipos para Transferencias Monetarias
 export interface TransferenciaMonetaria {
   id: string
   fecha: string
@@ -77,9 +73,10 @@ export interface TransferenciaMonetaria {
   dc: string
   importe: number
   moneda: string
-  datosOriginales?: Record<string, any>
+  datosOriginales: Record<string, any>
 }
 
+// Tipos para Movimientos de Mercados
 export interface MovimientoMercado {
   id: string
   fecha: string
@@ -88,18 +85,10 @@ export interface MovimientoMercado {
   dc: string
   importe: number
   moneda: string
-  datosOriginales?: Record<string, any>
+  datosOriginales: Record<string, any>
 }
 
-// Tipo para la clave de conciliación
-export interface ClaveConciliacion {
-  fecha: string
-  cuit: string
-  moneda: string
-  importe: number
-}
-
-// Tipo para el resultado de conciliación
+// Tipo para el resultado de la conciliación
 export interface ResultadoConciliacion {
   solicitudesPago: SolicitudPago[]
   recibosPago: ReciboPago[]
