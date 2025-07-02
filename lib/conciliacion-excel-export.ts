@@ -464,11 +464,30 @@ export function exportarConciliacionExcel(resultado: ResultadoConciliacion): voi
       XLSX.utils.book_append_sheet(workbook, wsMercados, "Mercados")
     }
 
-    // Generar archivo y descargar
-    const fechaHora = new Date().toISOString().slice(0, 19).replace(/[:-]/g, "").replace("T", "_")
-    const nombreArchivo = `Conciliacion_${fechaHora}.xlsx`
+    // --- Generar archivo y disparar descarga (entorno navegador) ---
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")
+    const nombreArchivo = `Conciliacion_${timestamp}.xlsx`
 
-    XLSX.writeFile(workbook, nombreArchivo)
+    // Escribimos el workbook a un ArrayBuffer
+    const wbArray = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
+
+    // Creamos un Blob y forzamos la descarga
+    const blob = new Blob([wbArray], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    })
+
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.download = nombreArchivo
+    link.style.display = "none"
+    document.body.appendChild(link)
+    link.click()
+
+    // Limpieza
+    setTimeout(() => {
+      URL.revokeObjectURL(link.href)
+      document.body.removeChild(link)
+    }, 1000)
 
     console.log(`✅ Archivo Excel generado: ${nombreArchivo}`)
   } catch (error) {
