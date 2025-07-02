@@ -76,6 +76,19 @@ function inferirMoneda(nombreArchivo: string): string {
   return "$" // Pesos por defecto
 }
 
+// Función para buscar índice de columna por nombre
+function buscarColumna(headers: string[], nombres: string[]): number {
+  for (let i = 0; i < headers.length; i++) {
+    const header = headers[i]?.toString().toLowerCase() || ""
+    for (const nombre of nombres) {
+      if (header.includes(nombre.toLowerCase())) {
+        return i
+      }
+    }
+  }
+  return -1
+}
+
 // Parser para Status Órdenes de Pago
 export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPago[]> {
   return new Promise((resolve, reject) => {
@@ -91,9 +104,9 @@ export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPag
 
         const resultados: StatusOrdenPago[] = []
 
-        // Buscar header y procesar datos
+        // Buscar header
         let headerRow = -1
-        for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
           const row = jsonData[i]
           if (
             row &&
@@ -110,10 +123,35 @@ export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPag
 
         if (headerRow === -1) {
           console.warn("No se encontró header en Status Órdenes de Pago")
-          headerRow = 0
+          resolve([])
+          return
         }
 
         const headers = jsonData[headerRow] || []
+        console.log("Headers Status Órdenes:", headers)
+
+        // Buscar índices de columnas
+        const colFecha = buscarColumna(headers, ["fecha de concertación", "fecha concertación", "fecha"])
+        const colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero comitente"])
+        const colComitenteDesc = buscarColumna(headers, [
+          "comitente (descripción)",
+          "comitente descripcion",
+          "descripcion",
+        ])
+        const colMoneda = buscarColumna(headers, ["moneda"])
+        const colImporte = buscarColumna(headers, ["importe"])
+        const colCuit = buscarColumna(headers, ["cuit"])
+        const colEstado = buscarColumna(headers, ["estado"])
+
+        console.log("Índices encontrados:", {
+          colFecha,
+          colComitenteNum,
+          colComitenteDesc,
+          colMoneda,
+          colImporte,
+          colCuit,
+          colEstado,
+        })
 
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i]
@@ -129,17 +167,17 @@ export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPag
             })
 
             const statusOrden: StatusOrdenPago = {
-              fechaConcertacion: convertirFecha(row[0]?.toString() || ""),
-              comitenteNumero: row[1]?.toString() || "",
-              comitenteDescripcion: row[2]?.toString() || "",
-              moneda: row[3]?.toString() || "",
-              importe: convertirImporte(row[4]?.toString() || "0"),
-              cuit: limpiarCuit(row[5]?.toString() || ""),
-              estado: row[6]?.toString() || "",
+              fechaConcertacion: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
+              comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
+              comitenteDescripcion: colComitenteDesc >= 0 ? row[colComitenteDesc]?.toString() || "" : "",
+              moneda: colMoneda >= 0 ? row[colMoneda]?.toString() || "" : "",
+              importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
+              cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
+              estado: colEstado >= 0 ? row[colEstado]?.toString() || "" : "",
               datosOriginales,
             }
 
-            if (statusOrden.comitenteNumero) {
+            if (statusOrden.comitenteNumero || statusOrden.cuit) {
               resultados.push(statusOrden)
             }
           } catch (error) {
@@ -176,7 +214,7 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
 
         // Buscar header
         let headerRow = -1
-        for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
           const row = jsonData[i]
           if (
             row &&
@@ -191,8 +229,35 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
           }
         }
 
-        if (headerRow === -1) headerRow = 0
+        if (headerRow === -1) {
+          console.warn("No se encontró header en Confirmación de Solicitudes")
+          resolve([])
+          return
+        }
+
         const headers = jsonData[headerRow] || []
+        console.log("Headers Confirmación:", headers)
+
+        // Buscar índices de columnas
+        const colFecha = buscarColumna(headers, ["fecha"])
+        const colEstado = buscarColumna(headers, ["estado"])
+        const colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero"])
+        const colComitenteDenom = buscarColumna(headers, [
+          "comitente (denominación)",
+          "comitente denominacion",
+          "denominacion",
+        ])
+        const colMonedaDesc = buscarColumna(headers, ["moneda (descripción)", "moneda descripcion", "moneda"])
+        const colImporte = buscarColumna(headers, ["importe"])
+
+        console.log("Índices Confirmación:", {
+          colFecha,
+          colEstado,
+          colComitenteNum,
+          colComitenteDenom,
+          colMonedaDesc,
+          colImporte,
+        })
 
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i]
@@ -208,12 +273,12 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
             })
 
             const confirmacion: ConfirmacionSolicitud = {
-              fecha: convertirFecha(row[0]?.toString() || ""),
-              estado: row[1]?.toString() || "",
-              comitenteNumero: row[2]?.toString() || "",
-              comitenteDenominacion: row[3]?.toString() || "",
-              monedaDescripcion: row[4]?.toString() || "",
-              importe: convertirImporte(row[5]?.toString() || "0"),
+              fecha: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
+              estado: colEstado >= 0 ? row[colEstado]?.toString() || "" : "",
+              comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
+              comitenteDenominacion: colComitenteDenom >= 0 ? row[colComitenteDenom]?.toString() || "" : "",
+              monedaDescripcion: colMonedaDesc >= 0 ? row[colMonedaDesc]?.toString() || "" : "",
+              importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
               datosOriginales,
             }
 
@@ -254,7 +319,7 @@ export async function parseRecibosPago(file: File): Promise<ReciboPago[]> {
 
         // Buscar header
         let headerRow = -1
-        for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
           const row = jsonData[i]
           if (
             row &&
@@ -269,8 +334,33 @@ export async function parseRecibosPago(file: File): Promise<ReciboPago[]> {
           }
         }
 
-        if (headerRow === -1) headerRow = 0
+        if (headerRow === -1) {
+          console.warn("No se encontró header en Recibos de Pago")
+          resolve([])
+          return
+        }
+
         const headers = jsonData[headerRow] || []
+        console.log("Headers Recibos:", headers)
+
+        // Buscar índices de columnas
+        const colFechaLiq = buscarColumna(headers, ["fecha de liquidación", "fecha liquidacion", "fecha"])
+        const colComitenteDenom = buscarColumna(headers, [
+          "comitente (denominación)",
+          "comitente denominacion",
+          "denominacion",
+        ])
+        const colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero"])
+        const colImporte = buscarColumna(headers, ["importe"])
+        const colCuit = buscarColumna(headers, ["cuit/cuil titular", "cuit", "cuil"])
+
+        console.log("Índices Recibos:", {
+          colFechaLiq,
+          colComitenteDenom,
+          colComitenteNum,
+          colImporte,
+          colCuit,
+        })
 
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i]
@@ -287,17 +377,17 @@ export async function parseRecibosPago(file: File): Promise<ReciboPago[]> {
 
             const recibo: ReciboPago = {
               id: `recibo-${Date.now()}-${i}`,
-              fechaLiquidacion: convertirFecha(row[0]?.toString() || ""),
-              comitenteDenominacion: row[1]?.toString() || "",
-              comitenteNumero: row[2]?.toString() || "",
-              importe: convertirImporte(row[3]?.toString() || "0"),
-              cuit: limpiarCuit(row[4]?.toString() || ""),
+              fechaLiquidacion: convertirFecha(colFechaLiq >= 0 ? row[colFechaLiq]?.toString() || "" : ""),
+              comitenteDenominacion: colComitenteDenom >= 0 ? row[colComitenteDenom]?.toString() || "" : "",
+              comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
+              importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
+              cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
               conciliadoSolicitudes: false,
               conciliadoMovimientos: false,
               datosOriginales,
             }
 
-            if (recibo.comitenteNumero) {
+            if (recibo.comitenteNumero || recibo.cuit) {
               resultados.push(recibo)
             }
           } catch (error) {
@@ -340,35 +430,41 @@ export async function parseMovimientosBancarios(file: File): Promise<{
 
         const moneda = inferirMoneda(file.name)
 
-        // Buscar header
-        let headerRow = -1
-        for (let i = 0; i < Math.min(5, jsonData.length); i++) {
-          const row = jsonData[i]
-          if (
-            row &&
-            row.some(
-              (cell) =>
-                cell?.toString().toLowerCase().includes("fecha") ||
-                cell?.toString().toLowerCase().includes("beneficiario"),
-            )
-          ) {
-            headerRow = i
-            break
-          }
+        // Para movimientos bancarios: primera fila se omite, segunda fila son headers, tercera fila en adelante es contenido
+        const headerRow = 1 // Segunda fila (índice 1)
+
+        if (jsonData.length < 3) {
+          console.warn("Archivo de movimientos bancarios muy corto")
+          resolve({ movimientos: [], transferencias: [], mercados: [] })
+          return
         }
 
-        if (headerRow === -1) headerRow = 0
         const headers = jsonData[headerRow] || []
+        console.log("Headers Movimientos Bancarios:", headers)
 
+        // Buscar índices de columnas
+        const colFecha = buscarColumna(headers, ["fecha"])
+        const colBeneficiario = buscarColumna(headers, ["beneficiario"])
+        const colDC = buscarColumna(headers, ["d/c", "dc"])
+        const colImporte = buscarColumna(headers, ["importe"])
+
+        console.log("Índices Movimientos:", {
+          colFecha,
+          colBeneficiario,
+          colDC,
+          colImporte,
+        })
+
+        // Procesar desde la tercera fila (índice 2)
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
 
           try {
-            const fecha = convertirFecha(row[0]?.toString() || "")
-            const beneficiario = row[1]?.toString() || ""
-            const dc = row[2]?.toString().toUpperCase() || ""
-            const importe = convertirImporte(row[3]?.toString() || "0")
+            const fecha = convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : "")
+            const beneficiario = colBeneficiario >= 0 ? row[colBeneficiario]?.toString() || "" : ""
+            const dc = colDC >= 0 ? row[colDC]?.toString().toUpperCase() || "" : ""
+            const importe = convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0")
             const cuit = extraerCuitBeneficiario(beneficiario)
 
             // Crear objeto con datos originales
