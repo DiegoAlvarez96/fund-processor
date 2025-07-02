@@ -18,7 +18,10 @@ export default function ProgressModal({ isOpen, title, message, current, total }
     <Dialog open={isOpen}>
       <DialogContent className="sm:max-w-md" hideCloseButton>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            {title}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="text-sm text-gray-600">{message}</div>
