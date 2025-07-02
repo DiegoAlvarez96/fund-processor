@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { FileSpreadsheet, Mail, Trash2, FileText, TrendingUp, AlertCircle, Info } from "lucide-react"
+import { FileSpreadsheet, Mail, Trash2, FileText, TrendingUp, AlertCircle, Info, Send } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { TituloOperacion } from "@/lib/titulos-parser"
 import {
@@ -15,9 +15,9 @@ import {
   detectInputFormat,
   type ProcessingProgress,
 } from "@/lib/titulos-parser"
-import { generateAllTitulosExcel } from "@/lib/titulos-excel"
+import { generateAllTitulosExcel, getFileName } from "@/lib/titulos-excel"
 import { MERCADO_CONFIG } from "@/lib/titulos-config"
-import VirtualizedTitulosTable from "./VirtualizedTitulosTable"
+import PaginatedTitulosTable from "./PaginatedTitulosTable"
 import EmailPreviewModal from "./EmailPreviewModal"
 import ProgressModal from "@/components/ui/progress-modal"
 
@@ -31,6 +31,16 @@ export default function TitulosProcessor() {
   const [inputFormat, setInputFormat] = useState("")
 
   const { toast } = useToast()
+
+  // Estados para el modal de progreso
+  const [showProgress, setShowProgress] = useState(false)
+  const [progress, setProgress] = useState<ProcessingProgress>({
+    processed: 0,
+    total: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    currentStep: "",
+  })
 
   // Detectar formato cuando cambian los datos
   const handleDataChange = (value: string) => {
@@ -74,7 +84,7 @@ export default function TitulosProcessor() {
         toast({
           title: "Sin operaciones válidas",
           description:
-            "No se pudieron procesar los datos. Verifique el formato y que contengan BYMA, MAV o MAE al final de cada línea.",
+            "No se pudieron procesar los datos. Verifique que cada línea tenga exactamente 12 columnas y termine con BYMA, MAV o MAE.",
           variant: "destructive",
         })
         return
@@ -105,15 +115,6 @@ export default function TitulosProcessor() {
       setIsProcessing(false)
     }
   }, [rawData, inputFormat, toast])
-
-  const [showProgress, setShowProgress] = useState(false)
-  const [progress, setProgress] = useState<ProcessingProgress>({
-    processed: 0,
-    total: 0,
-    currentBatch: 0,
-    totalBatches: 0,
-    currentStep: "",
-  })
 
   // Generar archivos Excel
   const generarExcel = async () => {
@@ -161,6 +162,74 @@ export default function TitulosProcessor() {
     }
   }
 
+  // Generar y enviar emails directamente
+  const generarYEnviarEmails = async () => {
+    if (operaciones.length === 0) {
+      toast({
+        title: "Sin operaciones",
+        description: "Procese los datos primero",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Generar Excel si no están generados
+    if (Object.keys(excelFiles).length === 0) {
+      await generarExcel()
+    }
+
+    // Esperar un momento para que se generen los archivos
+    setTimeout(() => {
+      const mercadosConDatos = Object.keys(excelFiles).filter((mercado) => mercadoSummary[mercado] > 0)
+
+      mercadosConDatos.forEach((mercado) => {
+        const config = MERCADO_CONFIG[mercado]
+        const fileName = getFileName(mercado)
+        const fileBlob = excelFiles[mercado]
+
+        if (fileBlob) {
+          // Crear URL del blob para descarga
+          const fileUrl = URL.createObjectURL(fileBlob)
+
+          // Construir mailto link
+          const subject = encodeURIComponent(config.asunto)
+          const body = encodeURIComponent(`Estimados, Buenas tardes,
+
+Adjunto el informe conforme a la RG 624.
+
+Por favor confirmar recepción
+
+Saludos`)
+          const to = encodeURIComponent(config.destinatarios)
+
+          const mailtoLink = `mailto:${to}?subject=${subject}&body=${body}`
+
+          // Abrir Outlook
+          window.open(mailtoLink, "_blank")
+
+          // Crear link de descarga para el archivo
+          const downloadLink = document.createElement("a")
+          downloadLink.href = fileUrl
+          downloadLink.download = fileName
+          downloadLink.style.display = "none"
+          document.body.appendChild(downloadLink)
+          downloadLink.click()
+          document.body.removeChild(downloadLink)
+
+          // Limpiar URL después de un tiempo
+          setTimeout(() => {
+            URL.revokeObjectURL(fileUrl)
+          }, 1000)
+        }
+      })
+
+      toast({
+        title: "Emails generados",
+        description: `Se abrieron ${mercadosConDatos.length} emails en Outlook con sus archivos adjuntos`,
+      })
+    }, 1000)
+  }
+
   // Limpiar todo
   const limpiarTodo = () => {
     setRawData("")
@@ -188,9 +257,9 @@ export default function TitulosProcessor() {
   }, [progress.processed, progress.total])
 
   // Ejemplo de formato mejorado
-  const ejemploFormato = `SUCIC, MICAELA ELIANA 2,73E+10 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 BYMA
-MAMOGRAFIA DIGITAL SA 3,07E+10 B.E.GLOBALES U$S STEP UP 2035 1 Pesos 35868 837,794 30049995 MAV
-VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
+  const ejemploFormato = `MAMOGRAFIA DIGITAL SA 3,07E+10 B.E.GLOBALES U$S STEP UP 2035 1 Pesos 35868 837,794 30049995 0 0 0 MAV
+SUCIC, MICAELA ELIANA 2,73E+10 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 0 0 0 BYMA
+VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 0 0 0 MAE`
 
   return (
     <div className="space-y-6">
@@ -232,7 +301,8 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
               className="font-mono text-sm"
             />
             <p className="text-xs text-gray-500 mt-1">
-              💡 Tip: Copie directamente desde Excel o tablas. El sistema detectará automáticamente el formato.
+              💡 Tip: Cada línea debe tener exactamente 12 columnas separadas por espacios y terminar con BYMA, MAV o
+              MAE.
             </p>
           </div>
 
@@ -258,12 +328,15 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Formatos soportados:</strong>
+              <strong>Formato requerido (12 columnas):</strong>
               <ul className="list-disc list-inside mt-1 text-sm">
-                <li>Datos copiados directamente de Excel/tablas</li>
-                <li>Texto separado por espacios múltiples</li>
-                <li>Texto separado por tabulaciones</li>
+                <li>
+                  Cliente // CUIT // Especie // Plazo // Moneda // Cant.Comprada // Precio.Compra // Monto.Comprado //
+                  Cant.Vendida // Precio.Venta // Monto.Vendido // Mercado
+                </li>
                 <li>Cada línea debe terminar con BYMA, MAV o MAE</li>
+                <li>El CUIT puede estar en formato científico (ej: 3,07E+10)</li>
+                <li>La especie puede contener números (ej: "BONO 2030") - se mantendrá como un solo campo</li>
               </ul>
             </AlertDescription>
           </Alert>
@@ -297,22 +370,6 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
         </Card>
       )}
 
-      {/* Vista Previa de Datos */}
-      {operaciones.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>📋 Vista Previa de Datos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <VirtualizedTitulosTable
-              operaciones={operaciones}
-              filtroMercado={filtroMercado}
-              onFiltroChange={setFiltroMercado}
-            />
-          </CardContent>
-        </Card>
-      )}
-
       {/* Acciones */}
       {operaciones.length > 0 && (
         <Card>
@@ -320,16 +377,22 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
             <CardTitle>🎯 Acciones</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               <Button onClick={generarExcel} disabled={isProcessing} className="bg-green-600 hover:bg-green-700">
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
                 {isProcessing ? "Generando..." : "Generar Archivos Excel"}
               </Button>
 
+              <Button onClick={generarYEnviarEmails} disabled={isProcessing} className="bg-blue-600 hover:bg-blue-700">
+                <Send className="w-4 h-4 mr-2" />
+                Generar Emails
+              </Button>
+
               <Button
                 onClick={() => setShowEmailModal(true)}
                 disabled={Object.keys(excelFiles).length === 0}
-                className="bg-blue-600 hover:bg-blue-700"
+                variant="outline"
+                className="bg-purple-50 text-purple-700 border-purple-200"
               >
                 <Mail className="w-4 h-4 mr-2" />
                 Previsualizar Emails
@@ -358,10 +421,27 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
                   })}
                 </div>
                 <p className="text-green-600 text-sm mt-2">
-                  ✅ Listos para enviar por email. Haga clic en "Previsualizar Emails" para continuar.
+                  ✅ Listos para enviar. Use "Generar Emails" para envío directo o "Previsualizar Emails" para editar
+                  antes de enviar.
                 </p>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Vista Previa de Datos */}
+      {operaciones.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>📋 Vista Previa de Datos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PaginatedTitulosTable
+              operaciones={operaciones}
+              filtroMercado={filtroMercado}
+              onFiltroChange={setFiltroMercado}
+            />
           </CardContent>
         </Card>
       )}
