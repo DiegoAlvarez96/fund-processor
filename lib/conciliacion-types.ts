@@ -25,6 +25,9 @@ export interface ConfirmacionSolicitud {
   datosOriginales: Record<string, any>
 }
 
+// Tipos de conciliación
+export type TipoConciliacion = "completa" | "por-importe" | "no-conciliado"
+
 export interface SolicitudPago {
   id: string
   fecha: string
@@ -37,6 +40,10 @@ export interface SolicitudPago {
   origen: "status" | "confirmacion"
   conciliadoRecibos: boolean
   conciliadoMovimientos: boolean
+  // NUEVOS: Campos para conciliación por importe
+  conciliadoRecibosPorImporte: boolean
+  conciliadoMovimientosPorImporte: boolean
+  tipoConciliacion: TipoConciliacion
   datosOriginales: Record<string, any>
 }
 
@@ -50,6 +57,10 @@ export interface ReciboPago {
   moneda?: string // Agregar moneda a ReciboPago
   conciliadoSolicitudes: boolean
   conciliadoMovimientos: boolean
+  // NUEVOS: Campos para conciliación por importe
+  conciliadoSolicitudesPorImporte: boolean
+  conciliadoMovimientosPorImporte: boolean
+  tipoConciliacion: TipoConciliacion
   datosOriginales: Record<string, any>
 }
 
@@ -63,6 +74,10 @@ export interface MovimientoBancario {
   moneda: string
   conciliadoSolicitudes: boolean
   conciliadoRecibos: boolean
+  // NUEVOS: Campos para conciliación por importe
+  conciliadoSolicitudesPorImporte: boolean
+  conciliadoRecibosPorImporte: boolean
+  tipoConciliacion: TipoConciliacion
   datosOriginales: Record<string, any>
 }
 
@@ -93,6 +108,7 @@ export interface EstadisticasConciliacion {
   totalRecibos: number
   totalMovimientos: number
   conciliadosCompletos: number
+  conciliadosPorImporte: number
   noConciliados: number
 }
 
@@ -110,6 +126,7 @@ export interface ResumenItem {
   cantidad: number
   importeTotal: number
   conciliados: number
+  conciliadosPorImporte: number
   noConciliados: number
 }
 
