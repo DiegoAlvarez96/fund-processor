@@ -833,6 +833,10 @@ export async function parseRecibosPago(
               moneda: moneda, // Usar la moneda extraída
               conciliadoSolicitudes: false,
               conciliadoMovimientos: false,
+              // NUEVOS: Inicializar campos de conciliación por importe
+              conciliadoSolicitudesPorImporte: false,
+              conciliadoMovimientosPorImporte: false,
+              tipoConciliacion: "no-conciliado",
               datosOriginales,
             }
 
@@ -996,6 +1000,10 @@ export async function parseMovimientosBancarios(file: File): Promise<{
                 moneda,
                 conciliadoSolicitudes: false,
                 conciliadoRecibos: false,
+                // NUEVOS: Inicializar campos de conciliación por importe
+                conciliadoSolicitudesPorImporte: false,
+                conciliadoRecibosPorImporte: false,
+                tipoConciliacion: "no-conciliado",
                 datosOriginales,
               })
             }
@@ -1069,6 +1077,10 @@ export function crearSolicitudesPago(
       origen: "status",
       conciliadoRecibos: false,
       conciliadoMovimientos: false,
+      // NUEVOS: Inicializar campos de conciliación por importe
+      conciliadoRecibosPorImporte: false,
+      conciliadoMovimientosPorImporte: false,
+      tipoConciliacion: "no-conciliado",
       datosOriginales: status.datosOriginales,
     })
   })
@@ -1092,6 +1104,10 @@ export function crearSolicitudesPago(
       origen: "confirmacion",
       conciliadoRecibos: false,
       conciliadoMovimientos: false,
+      // NUEVOS: Inicializar campos de conciliación por importe
+      conciliadoRecibosPorImporte: false,
+      conciliadoMovimientosPorImporte: false,
+      tipoConciliacion: "no-conciliado",
       datosOriginales: confirmacion.datosOriginales,
     })
   })
@@ -1099,19 +1115,142 @@ export function crearSolicitudesPago(
   return solicitudes
 }
 
-// Función para generar clave de conciliación
+// Función para generar clave de conciliación completa
 function generarClaveConciliacion(fecha: string, cuit: string, moneda: string, importe: number): string {
   const monedaNormalizada = moneda === "Pesos" ? "$" : moneda === "Dolar" ? "USD" : moneda
   return `${fecha}-${cuit}-${monedaNormalizada}-${importe.toFixed(2)}`
 }
 
-// Función principal de conciliación
+// NUEVA: Función para generar clave de conciliación solo por importe
+function generarClaveImporte(importe: number): string {
+  return importe.toFixed(2)
+}
+
+// NUEVA: Función para conciliación automática por importe
+function conciliarPorImporte(
+  solicitudes: SolicitudPago[],
+  recibos: ReciboPago[],
+  movimientos: MovimientoBancario[],
+): void {
+  console.log("🟡 Iniciando conciliación automática por importe...")
+
+  // Crear mapas de importes para los registros no conciliados
+  const solicitudesNoConciliadas = solicitudes.filter((s) => s.tipoConciliacion === "no-conciliado")
+  const recibosNoConciliados = recibos.filter((r) => r.tipoConciliacion === "no-conciliado")
+  const movimientosNoConciliados = movimientos.filter((m) => m.tipoConciliacion === "no-conciliado")
+
+  console.log(
+    `📊 Registros no conciliados: ${solicitudesNoConciliadas.length} solicitudes, ${recibosNoConciliados.length} recibos, ${movimientosNoConciliados.length} movimientos`,
+  )
+
+  // Crear mapas por importe
+  const mapaSolicitudesPorImporte = new Map<string, SolicitudPago[]>()
+  const mapaRecibosPorImporte = new Map<string, ReciboPago[]>()
+  const mapaMovimientosPorImporte = new Map<string, MovimientoBancario[]>()
+
+  // Indexar solicitudes no conciliadas por importe
+  solicitudesNoConciliadas.forEach((solicitud) => {
+    const claveImporte = generarClaveImporte(solicitud.importe)
+    if (!mapaSolicitudesPorImporte.has(claveImporte)) {
+      mapaSolicitudesPorImporte.set(claveImporte, [])
+    }
+    mapaSolicitudesPorImporte.get(claveImporte)!.push(solicitud)
+  })
+
+  // Indexar recibos no conciliados por importe
+  recibosNoConciliados.forEach((recibo) => {
+    const claveImporte = generarClaveImporte(recibo.importe)
+    if (!mapaRecibosPorImporte.has(claveImporte)) {
+      mapaRecibosPorImporte.set(claveImporte, [])
+    }
+    mapaRecibosPorImporte.get(claveImporte)!.push(recibo)
+  })
+
+  // Indexar movimientos no conciliados por importe
+  movimientosNoConciliados.forEach((movimiento) => {
+    const claveImporte = generarClaveImporte(movimiento.importe)
+    if (!mapaMovimientosPorImporte.has(claveImporte)) {
+      mapaMovimientosPorImporte.set(claveImporte, [])
+    }
+    mapaMovimientosPorImporte.get(claveImporte)!.push(movimiento)
+  })
+
+  let conciliadosPorImporte = 0
+
+  // Conciliar solicitudes por importe
+  solicitudesNoConciliadas.forEach((solicitud) => {
+    const claveImporte = generarClaveImporte(solicitud.importe)
+    let conciliadoAlgo = false
+
+    // Buscar recibos con el mismo importe
+    if (mapaRecibosPorImporte.has(claveImporte)) {
+      const recibosCoincidentes = mapaRecibosPorImporte.get(claveImporte)!
+      if (recibosCoincidentes.length > 0) {
+        solicitud.conciliadoRecibosPorImporte = true
+        // Marcar el primer recibo coincidente
+        recibosCoincidentes[0].conciliadoSolicitudesPorImporte = true
+        conciliadoAlgo = true
+      }
+    }
+
+    // Buscar movimientos con el mismo importe
+    if (mapaMovimientosPorImporte.has(claveImporte)) {
+      const movimientosCoincidentes = mapaMovimientosPorImporte.get(claveImporte)!
+      if (movimientosCoincidentes.length > 0) {
+        solicitud.conciliadoMovimientosPorImporte = true
+        // Marcar el primer movimiento coincidente
+        movimientosCoincidentes[0].conciliadoSolicitudesPorImporte = true
+        conciliadoAlgo = true
+      }
+    }
+
+    // Actualizar tipo de conciliación
+    if (conciliadoAlgo) {
+      solicitud.tipoConciliacion = "por-importe"
+      conciliadosPorImporte++
+    }
+  })
+
+  // Conciliar recibos con movimientos por importe
+  recibosNoConciliados.forEach((recibo) => {
+    const claveImporte = generarClaveImporte(recibo.importe)
+
+    // Solo procesar si no fue conciliado con solicitudes
+    if (!recibo.conciliadoSolicitudesPorImporte) {
+      // Buscar movimientos con el mismo importe
+      if (mapaMovimientosPorImporte.has(claveImporte)) {
+        const movimientosCoincidentes = mapaMovimientosPorImporte.get(claveImporte)!
+        const movimientoDisponible = movimientosCoincidentes.find((m) => !m.conciliadoSolicitudesPorImporte)
+
+        if (movimientoDisponible) {
+          recibo.conciliadoMovimientosPorImporte = true
+          movimientoDisponible.conciliadoRecibosPorImporte = true
+
+          // Actualizar tipos de conciliación
+          if (recibo.tipoConciliacion === "no-conciliado") {
+            recibo.tipoConciliacion = "por-importe"
+          }
+          if (movimientoDisponible.tipoConciliacion === "no-conciliado") {
+            movimientoDisponible.tipoConciliacion = "por-importe"
+          }
+        }
+      }
+    }
+  })
+
+  console.log(`🟡 Conciliación por importe completada: ${conciliadosPorImporte} registros adicionales conciliados`)
+}
+
+// Función principal de conciliación (ACTUALIZADA)
 export function realizarConciliacion(
   solicitudes: SolicitudPago[],
   recibos: ReciboPago[],
   movimientos: MovimientoBancario[],
 ): ResultadoConciliacion {
-  console.log("🔄 Iniciando conciliación...")
+  console.log("🔄 Iniciando conciliación completa...")
+
+  // PASO 1: Conciliación completa (fecha + CUIT + moneda + importe)
+  console.log("🟢 Paso 1: Conciliación completa...")
 
   // Crear mapas de claves para búsqueda rápida
   const mapaSolicitudes = new Map<string, SolicitudPago[]>()
@@ -1124,6 +1263,7 @@ export function realizarConciliacion(
     if (!mapaSolicitudes.has(clave)) {
       mapaSolicitudes.set(clave, [])
     }
+    mapaSolicitudes.get(clave)
     mapaSolicitudes.get(clave)!.push(solicitud)
   })
 
@@ -1147,7 +1287,7 @@ export function realizarConciliacion(
     mapaMovimientos.get(clave)!.push(movimiento)
   })
 
-  // Realizar conciliación
+  // Realizar conciliación completa
   let conciliadosCompletos = 0
 
   // Conciliar solicitudes
@@ -1167,6 +1307,12 @@ export function realizarConciliacion(
         movimiento.conciliadoSolicitudes = true
       })
     }
+
+    // Actualizar tipo de conciliación
+    if (solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos) {
+      solicitud.tipoConciliacion = "completa"
+      conciliadosCompletos++
+    }
   })
 
   // Conciliar recibos con movimientos
@@ -1181,18 +1327,38 @@ export function realizarConciliacion(
         movimiento.conciliadoRecibos = true
       })
     }
-  })
 
-  // Contar conciliados completos
-  solicitudes.forEach((solicitud) => {
-    if (solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos) {
-      conciliadosCompletos++
+    // Actualizar tipo de conciliación para recibos
+    if (recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos) {
+      recibo.tipoConciliacion = "completa"
     }
   })
 
-  const noConciliados = solicitudes.length + recibos.length + movimientos.length - conciliadosCompletos * 3
+  // Actualizar tipo de conciliación para movimientos
+  movimientos.forEach((movimiento) => {
+    if (movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos) {
+      movimiento.tipoConciliacion = "completa"
+    }
+  })
 
-  console.log(`✅ Conciliación completada: ${conciliadosCompletos} completos, ${noConciliados} no conciliados`)
+  console.log(`🟢 Conciliación completa: ${conciliadosCompletos} registros conciliados completamente`)
+
+  // PASO 2: Conciliación automática por importe para los no conciliados
+  conciliarPorImporte(solicitudes, recibos, movimientos)
+
+  // Calcular estadísticas finales
+  const conciliadosPorImporte =
+    solicitudes.filter((s) => s.tipoConciliacion === "por-importe").length +
+    recibos.filter((r) => r.tipoConciliacion === "por-importe").length +
+    movimientos.filter((m) => m.tipoConciliacion === "por-importe").length
+
+  const totalRegistros = solicitudes.length + recibos.length + movimientos.length
+  const noConciliados = totalRegistros - conciliadosCompletos * 3 - conciliadosPorImporte
+
+  console.log(`✅ Conciliación total completada:`)
+  console.log(`   🟢 Completos: ${conciliadosCompletos}`)
+  console.log(`   🟡 Por importe: ${conciliadosPorImporte}`)
+  console.log(`   🔴 No conciliados: ${noConciliados}`)
 
   return {
     solicitudesPago: solicitudes,
@@ -1205,6 +1371,7 @@ export function realizarConciliacion(
       totalRecibos: recibos.length,
       totalMovimientos: movimientos.length,
       conciliadosCompletos,
+      conciliadosPorImporte,
       noConciliados,
     },
   }
