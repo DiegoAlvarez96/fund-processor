@@ -302,7 +302,7 @@ function buscarColumna(headers: string[], nombres: string[]): number {
   return -1
 }
 
-// Función para verificar si un beneficiario es de mercados
+// Función para verificar si un beneficiario es de mercados - ACTUALIZADA
 function esBeneficiarioMercado(beneficiario: string): boolean {
   const beneficiarioUpper = beneficiario.toUpperCase()
 
@@ -315,6 +315,16 @@ function esBeneficiarioMercado(beneficiario: string): boolean {
   ]
 
   return patronesMercados.some((patron) => beneficiarioUpper.includes(patron))
+}
+
+// Función para verificar si un CUIT es de mercados - NUEVA
+function esCuitMercado(cuit: string): boolean {
+  const cuitsMercados = [
+    "30711610126", // CUIT original de mercados
+    "30529177875", // NUEVO CUIT agregado por el usuario
+  ]
+
+  return cuitsMercados.includes(cuit)
 }
 
 // Función para verificar si un beneficiario es un impuesto (solo contiene guiones)
@@ -867,7 +877,7 @@ export async function parseRecibosPago(
   })
 }
 
-// Parser para Movimientos Bancarios
+// Parser para Movimientos Bancarios - ACTUALIZADO
 export async function parseMovimientosBancarios(file: File): Promise<{
   movimientos: MovimientoBancario[]
   transferencias: TransferenciaMonetaria[]
@@ -959,8 +969,8 @@ export async function parseMovimientosBancarios(file: File): Promise<{
                 continue
               }
 
-              // Verificar si es beneficiario de mercados
-              if (cuit === "30711610126" && esBeneficiarioMercado(beneficiario)) {
+              // ACTUALIZADO: Verificar si es CUIT de mercados (incluye el nuevo CUIT)
+              if (esCuitMercado(cuit) && esBeneficiarioMercado(beneficiario)) {
                 mercados.push({
                   id: `mercado-${Date.now()}-${i}`,
                   fecha,
@@ -974,8 +984,8 @@ export async function parseMovimientosBancarios(file: File): Promise<{
                 continue
               }
 
-              // Separar CUIT 30711610126 para transferencias monetarias (no mercados)
-              if (cuit === "30711610126" && !esBeneficiarioMercado(beneficiario)) {
+              // ACTUALIZADO: Separar CUITs de mercados para transferencias monetarias (no mercados)
+              if (esCuitMercado(cuit) && !esBeneficiarioMercado(beneficiario)) {
                 transferencias.push({
                   id: `transferencia-${Date.now()}-${i}`,
                   fecha,
@@ -1008,8 +1018,8 @@ export async function parseMovimientosBancarios(file: File): Promise<{
               })
             }
 
-            // Para transferencias monetarias y mercados, incluir tanto C como D
-            if (cuit === "30711610126") {
+            // ACTUALIZADO: Para transferencias monetarias y mercados, incluir tanto C como D
+            if (esCuitMercado(cuit)) {
               // Verificar si es beneficiario de mercados
               if (esBeneficiarioMercado(beneficiario)) {
                 mercados.push({
@@ -1126,7 +1136,7 @@ function generarClaveImporte(importe: number): string {
   return importe.toFixed(2)
 }
 
-// NUEVA: Función para conciliación automática por importe
+// NUEVA: Función para conciliación automática por importe - CORREGIDA
 function conciliarPorImporte(
   solicitudes: SolicitudPago[],
   recibos: ReciboPago[],
@@ -1177,68 +1187,69 @@ function conciliarPorImporte(
 
   let conciliadosPorImporte = 0
 
-  // Conciliar solicitudes por importe
-  solicitudesNoConciliadas.forEach((solicitud) => {
-    const claveImporte = generarClaveImporte(solicitud.importe)
-    let conciliadoAlgo = false
+  // CORREGIDO: Conciliar por grupos de importe
+  const importesUnicos = new Set([
+    ...Array.from(mapaSolicitudesPorImporte.keys()),
+    ...Array.from(mapaRecibosPorImporte.keys()),
+    ...Array.from(mapaMovimientosPorImporte.keys()),
+  ])
 
-    // Buscar recibos con el mismo importe
-    if (mapaRecibosPorImporte.has(claveImporte)) {
-      const recibosCoincidentes = mapaRecibosPorImporte.get(claveImporte)!
-      if (recibosCoincidentes.length > 0) {
-        solicitud.conciliadoRecibosPorImporte = true
-        // Marcar el primer recibo coincidente
-        recibosCoincidentes[0].conciliadoSolicitudesPorImporte = true
-        conciliadoAlgo = true
-      }
-    }
+  for (const importe of importesUnicos) {
+    const solicitudesConImporte = mapaSolicitudesPorImporte.get(importe) || []
+    const recibosConImporte = mapaRecibosPorImporte.get(importe) || []
+    const movimientosConImporte = mapaMovimientosPorImporte.get(importe) || []
 
-    // Buscar movimientos con el mismo importe
-    if (mapaMovimientosPorImporte.has(claveImporte)) {
-      const movimientosCoincidentes = mapaMovimientosPorImporte.get(claveImporte)!
-      if (movimientosCoincidentes.length > 0) {
-        solicitud.conciliadoMovimientosPorImporte = true
-        // Marcar el primer movimiento coincidente
-        movimientosCoincidentes[0].conciliadoSolicitudesPorImporte = true
-        conciliadoAlgo = true
-      }
-    }
+    // Si hay al menos 2 tipos de registros con el mismo importe, conciliar
+    const tiposDisponibles = [
+      solicitudesConImporte.length > 0,
+      recibosConImporte.length > 0,
+      movimientosConImporte.length > 0,
+    ].filter(Boolean).length
 
-    // Actualizar tipo de conciliación
-    if (conciliadoAlgo) {
-      solicitud.tipoConciliacion = "por-importe"
-      conciliadosPorImporte++
-    }
-  })
+    if (tiposDisponibles >= 2) {
+      console.log(
+        `🟡 Conciliando por importe ${importe}: ${solicitudesConImporte.length} solicitudes, ${recibosConImporte.length} recibos, ${movimientosConImporte.length} movimientos`,
+      )
 
-  // Conciliar recibos con movimientos por importe
-  recibosNoConciliados.forEach((recibo) => {
-    const claveImporte = generarClaveImporte(recibo.importe)
-
-    // Solo procesar si no fue conciliado con solicitudes
-    if (!recibo.conciliadoSolicitudesPorImporte) {
-      // Buscar movimientos con el mismo importe
-      if (mapaMovimientosPorImporte.has(claveImporte)) {
-        const movimientosCoincidentes = mapaMovimientosPorImporte.get(claveImporte)!
-        const movimientoDisponible = movimientosCoincidentes.find((m) => !m.conciliadoSolicitudesPorImporte)
-
-        if (movimientoDisponible) {
-          recibo.conciliadoMovimientosPorImporte = true
-          movimientoDisponible.conciliadoRecibosPorImporte = true
-
-          // Actualizar tipos de conciliación
-          if (recibo.tipoConciliacion === "no-conciliado") {
-            recibo.tipoConciliacion = "por-importe"
-          }
-          if (movimientoDisponible.tipoConciliacion === "no-conciliado") {
-            movimientoDisponible.tipoConciliacion = "por-importe"
-          }
+      // Marcar solicitudes
+      solicitudesConImporte.forEach((solicitud) => {
+        if (recibosConImporte.length > 0) {
+          solicitud.conciliadoRecibosPorImporte = true
         }
-      }
-    }
-  })
+        if (movimientosConImporte.length > 0) {
+          solicitud.conciliadoMovimientosPorImporte = true
+        }
+        solicitud.tipoConciliacion = "por-importe"
+        conciliadosPorImporte++
+      })
 
-  console.log(`🟡 Conciliación por importe completada: ${conciliadosPorImporte} registros adicionales conciliados`)
+      // Marcar recibos
+      recibosConImporte.forEach((recibo) => {
+        if (solicitudesConImporte.length > 0) {
+          recibo.conciliadoSolicitudesPorImporte = true
+        }
+        if (movimientosConImporte.length > 0) {
+          recibo.conciliadoMovimientosPorImporte = true
+        }
+        recibo.tipoConciliacion = "por-importe"
+        conciliadosPorImporte++
+      })
+
+      // Marcar movimientos
+      movimientosConImporte.forEach((movimiento) => {
+        if (solicitudesConImporte.length > 0) {
+          movimiento.conciliadoSolicitudesPorImporte = true
+        }
+        if (recibosConImporte.length > 0) {
+          movimiento.conciliadoRecibosPorImporte = true
+        }
+        movimiento.tipoConciliacion = "por-importe"
+        conciliadosPorImporte++
+      })
+    }
+  }
+
+  console.log(`🟡 Conciliación por importe completada: ${conciliadosPorImporte} registros conciliados`)
 }
 
 // Función principal de conciliación (ACTUALIZADA)
@@ -1263,7 +1274,6 @@ export function realizarConciliacion(
     if (!mapaSolicitudes.has(clave)) {
       mapaSolicitudes.set(clave, [])
     }
-    mapaSolicitudes.get(clave)
     mapaSolicitudes.get(clave)!.push(solicitud)
   })
 
