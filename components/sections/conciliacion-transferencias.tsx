@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import ProgressModal from "@/components/ui/progress-modal"
 import {
   Upload,
   FileSpreadsheet,
@@ -48,6 +49,13 @@ export default function ConciliacionTransferencias() {
   // Estados para datos procesados
   const [resultadoConciliacion, setResultadoConciliacion] = useState<ResultadoConciliacion | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Estados para modal de progreso
+  const [showProgress, setShowProgress] = useState(false)
+  const [progressTitle, setProgressTitle] = useState("")
+  const [progressMessage, setProgressMessage] = useState("")
+  const [progressCurrent, setProgressCurrent] = useState(0)
+  const [progressTotal, setProgressTotal] = useState(0)
 
   // Estados para filtros y búsqueda
   const [filtroSolicitudes, setFiltroSolicitudes] = useState<"todos" | "conciliados" | "no-conciliados">("todos")
@@ -98,6 +106,13 @@ export default function ConciliacionTransferencias() {
     })
   }
 
+  // Función para actualizar progreso
+  const updateProgress = (current: number, total: number, message: string) => {
+    setProgressCurrent(current)
+    setProgressTotal(total)
+    setProgressMessage(message)
+  }
+
   // Función principal para procesar todos los archivos
   const procesarArchivos = async () => {
     if (!archivoStatus || !archivoConfirmacion || !archivoRecibos || !archivoMovimientosPesos) {
@@ -110,15 +125,26 @@ export default function ConciliacionTransferencias() {
     }
 
     setIsProcessing(true)
+    setShowProgress(true)
+    setProgressTitle("Procesando archivos...")
 
     try {
       console.log("🔄 Iniciando procesamiento de archivos...")
 
-      // Procesar archivos en paralelo
-      const [statusData, confirmacionData, recibosData, movimientosPesosData, movimientosUSDData] = await Promise.all([
-        parseStatusOrdenesPago(archivoStatus),
-        parseConfirmacionSolicitudes(archivoConfirmacion),
-        parseRecibosPago(archivoRecibos),
+      // Procesar Status Órdenes con progreso
+      setProgressMessage("Procesando Status Órdenes de Pago...")
+      const statusData = await parseStatusOrdenesPago(archivoStatus, updateProgress)
+
+      // Procesar otros archivos
+      setProgressMessage("Procesando Confirmación de Solicitudes...")
+      const confirmacionData = await parseConfirmacionSolicitudes(archivoConfirmacion)
+
+      // Procesar Recibos con progreso
+      setProgressMessage("Procesando Recibos de Pago...")
+      const recibosData = await parseRecibosPago(archivoRecibos, updateProgress)
+
+      setProgressMessage("Procesando Movimientos Bancarios...")
+      const [movimientosPesosData, movimientosUSDData] = await Promise.all([
         parseMovimientosBancarios(archivoMovimientosPesos),
         archivoMovimientosUSD
           ? parseMovimientosBancarios(archivoMovimientosUSD)
@@ -133,6 +159,7 @@ export default function ConciliacionTransferencias() {
         movimientosUSD: movimientosUSDData.movimientos.length,
       })
 
+      setProgressMessage("Creando solicitudes de pago...")
       // Unir solicitudes de pago
       const solicitudesPago = crearSolicitudesPago(statusData, confirmacionData)
 
@@ -143,6 +170,7 @@ export default function ConciliacionTransferencias() {
 
       const todosMercados = [...movimientosPesosData.mercados, ...movimientosUSDData.mercados]
 
+      setProgressMessage("Realizando conciliación...")
       // Realizar conciliación
       const resultado = realizarConciliacion(solicitudesPago, recibosData, todosMovimientos)
 
@@ -165,6 +193,7 @@ export default function ConciliacionTransferencias() {
       })
     } finally {
       setIsProcessing(false)
+      setShowProgress(false)
     }
   }
 
@@ -286,6 +315,15 @@ export default function ConciliacionTransferencias() {
         </h1>
         <p className="text-gray-600">Sistema de conciliación entre solicitudes, recibos y movimientos bancarios</p>
       </div>
+
+      {/* Modal de Progreso */}
+      <ProgressModal
+        isOpen={showProgress}
+        title={progressTitle}
+        message={progressMessage}
+        current={progressCurrent}
+        total={progressTotal}
+      />
 
       {/* Carga de Archivos */}
       <Card>
