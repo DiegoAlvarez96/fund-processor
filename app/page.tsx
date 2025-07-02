@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Home,
   LogOut,
+  BarChart3,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -28,8 +29,8 @@ import { cn } from "@/lib/utils"
 import FundProcessor from "@/components/sections/FundProcessor"
 import BankFiles from "@/components/sections/bank-file-processor"
 import Dashboard from "@/components/sections/Dashboard"
-// Importar el nuevo componente
 import TitulosProcessor from "@/components/sections/TitulosProcessor"
+import ConciliacionTransferencias from "@/components/sections/ConciliacionTransferencias"
 
 // Configuración de timeout (en minutos)
 const SESSION_TIMEOUT_MINUTES = 30
@@ -93,6 +94,12 @@ const menuItems: MenuItem[] = [
         label: "Procesador de Archivos",
         icon: <FileText className="w-4 h-4" />,
         component: BankFiles,
+      },
+      {
+        id: "conciliacion-transferencias",
+        label: "Conciliación de Transferencias",
+        icon: <BarChart3 className="w-4 h-4" />,
+        component: ConciliacionTransferencias,
       },
     ],
   },
