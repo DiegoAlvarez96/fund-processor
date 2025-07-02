@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { FileSpreadsheet, Mail, Trash2, FileText, TrendingUp } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { FileSpreadsheet, Mail, Trash2, FileText, TrendingUp, AlertCircle, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { TituloOperacion } from "@/lib/titulos-parser"
-import { parseTitulosData, getMercadoSummary } from "@/lib/titulos-parser"
+import { parseTitulosData, getMercadoSummary, detectInputFormat, parseFromTableCopy } from "@/lib/titulos-parser"
 import { generateAllTitulosExcel } from "@/lib/titulos-excel"
 import { MERCADO_CONFIG } from "@/lib/titulos-config"
 import TitulosTable from "./TitulosTable"
@@ -21,10 +22,22 @@ export default function TitulosProcessor() {
   const [excelFiles, setExcelFiles] = useState<Record<string, Blob>>({})
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [inputFormat, setInputFormat] = useState("")
 
   const { toast } = useToast()
 
-  // Procesar datos pegados
+  // Detectar formato cuando cambian los datos
+  const handleDataChange = (value: string) => {
+    setRawData(value)
+    if (value.trim()) {
+      const format = detectInputFormat(value)
+      setInputFormat(format)
+    } else {
+      setInputFormat("")
+    }
+  }
+
+  // Procesar datos pegados con múltiples métodos
   const procesarDatos = () => {
     if (!rawData.trim()) {
       toast({
@@ -39,12 +52,31 @@ export default function TitulosProcessor() {
 
     try {
       console.log("🔄 Iniciando procesamiento de datos...")
-      const operacionesParsed = parseTitulosData(rawData)
+      console.log("📊 Formato detectado:", inputFormat)
+
+      let operacionesParsed: TituloOperacion[] = []
+
+      // Intentar múltiples métodos de parsing
+      console.log("🔄 Método 1: Parser principal...")
+      operacionesParsed = parseTitulosData(rawData)
+
+      // Si no funciona, intentar parser específico para tablas
+      if (operacionesParsed.length === 0) {
+        console.log("🔄 Método 2: Parser de tabla...")
+        operacionesParsed = parseFromTableCopy(rawData)
+      }
+
+      // Si aún no funciona, intentar parsing línea por línea más agresivo
+      if (operacionesParsed.length === 0) {
+        console.log("🔄 Método 3: Parser agresivo...")
+        operacionesParsed = parseAggressively(rawData)
+      }
 
       if (operacionesParsed.length === 0) {
         toast({
           title: "Sin operaciones válidas",
-          description: "No se encontraron operaciones válidas en los datos proporcionados",
+          description:
+            "No se pudieron procesar los datos. Verifique el formato y que contengan BYMA, MAV o MAE al final de cada línea.",
           variant: "destructive",
         })
         setIsProcessing(false)
@@ -58,19 +90,83 @@ export default function TitulosProcessor() {
       const totalOps = Object.values(summary).reduce((sum, count) => sum + count, 0)
 
       toast({
-        title: "Datos procesados",
+        title: "Datos procesados exitosamente",
         description: `Se procesaron ${totalOps} operaciones: BYMA(${summary.BYMA}), MAV(${summary.MAV}), MAE(${summary.MAE})`,
       })
     } catch (error) {
       console.error("❌ Error procesando datos:", error)
       toast({
         title: "Error al procesar",
-        description: "Verifique el formato de los datos. Deben estar separados por espacios o tabulaciones.",
+        description: "Ocurrió un error inesperado. Revise la consola para más detalles.",
         variant: "destructive",
       })
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  // Parser agresivo como último recurso
+  const parseAggressively = (rawData: string): TituloOperacion[] => {
+    console.log("🔄 Usando parser agresivo...")
+    const lines = rawData.trim().split(/\r\n|\r|\n/)
+    const operaciones: TituloOperacion[] = []
+
+    lines.forEach((line, index) => {
+      if (!line.trim()) return
+
+      // Buscar cualquier mención de mercado
+      const mercados = ["BYMA", "MAV", "MAE"]
+      let mercadoEncontrado = ""
+
+      for (const mercado of mercados) {
+        if (line.toUpperCase().includes(mercado)) {
+          mercadoEncontrado = mercado
+          break
+        }
+      }
+
+      if (!mercadoEncontrado) return
+
+      // Extraer nombre (primeras palabras hasta encontrar números)
+      const words = line.trim().split(/\s+/)
+      const nombreWords = []
+      let startOfNumbers = -1
+
+      for (let i = 0; i < words.length; i++) {
+        if (/^\d/.test(words[i]) || /E[+-]\d/.test(words[i])) {
+          startOfNumbers = i
+          break
+        }
+        nombreWords.push(words[i])
+      }
+
+      if (startOfNumbers === -1 || nombreWords.length === 0) return
+
+      const nombre = nombreWords.join(" ")
+      const numericParts = words.slice(startOfNumbers).filter((w) => w !== mercadoEncontrado)
+
+      if (numericParts.length >= 2) {
+        const operacion: TituloOperacion = {
+          denominacionCliente: nombre,
+          cuitCuil: numericParts[0] || "",
+          especie: numericParts.slice(1, -6).join(" ") || "N/A",
+          plazo: "0",
+          moneda: "Pesos",
+          cantidadComprada: numericParts[numericParts.length - 6] || "0",
+          precioPromedioCompra: numericParts[numericParts.length - 5] || "0",
+          montoComprado: numericParts[numericParts.length - 4] || "0",
+          cantidadVendida: numericParts[numericParts.length - 3] || "0",
+          precioPromedioVenta: numericParts[numericParts.length - 2] || "0",
+          montoVendido: numericParts[numericParts.length - 1] || "0",
+          mercado: mercadoEncontrado,
+        }
+
+        operaciones.push(operacion)
+        console.log(`✅ Operación parseada agresivamente: ${nombre} - ${mercadoEncontrado}`)
+      }
+    })
+
+    return operaciones
   }
 
   // Generar archivos Excel
@@ -125,6 +221,7 @@ export default function TitulosProcessor() {
     setOperaciones([])
     setExcelFiles({})
     setFiltroMercado("todos")
+    setInputFormat("")
     toast({
       title: "Datos limpiados",
       description: "Se eliminaron todos los datos y archivos",
@@ -135,9 +232,8 @@ export default function TitulosProcessor() {
   const mercadoSummary = getMercadoSummary(operaciones)
   const totalOperaciones = Object.values(mercadoSummary).reduce((sum, count) => sum + count, 0)
 
-  // Ejemplo de formato
-  const ejemploFormato = `Denominación Cliente Nº CUIT / CUIL / CIE/ CDI Especie Plazo Moneda Cantidad Comprada Precio Promedio Compra Monto Comprado Cantidad Vendida Precio Promedio Venta Monto Vendido Mercado
-SUCIC, MICAELA ELIANA 2,73E+10 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 BYMA
+  // Ejemplo de formato mejorado
+  const ejemploFormato = `SUCIC, MICAELA ELIANA 2,73E+10 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 BYMA
 MAMOGRAFIA DIGITAL SA 3,07E+10 B.E.GLOBALES U$S STEP UP 2035 1 Pesos 35868 837,794 30049995 MAV
 VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
 
@@ -160,24 +256,36 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Información sobre formato detectado */}
+          {inputFormat && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Formato detectado: <strong>{inputFormat}</strong>
+                {inputFormat === "mixed" && " - Se usarán múltiples métodos de parsing"}
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Pegue aquí los datos de operaciones (separados por espacios/tabulaciones):
-            </label>
+            <label className="block text-sm font-medium mb-2">Pegue aquí los datos de operaciones:</label>
             <Textarea
               value={rawData}
-              onChange={(e) => setRawData(e.target.value)}
+              onChange={(e) => handleDataChange(e.target.value)}
               placeholder={ejemploFormato}
               rows={8}
               className="font-mono text-sm"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Tip: Copie directamente desde Excel o tablas. El sistema detectará automáticamente el formato.
+            </p>
           </div>
 
           <div className="flex gap-3">
             <Button onClick={procesarDatos} disabled={isProcessing || !rawData.trim()}>
-              🔄 Procesar Datos
+              {isProcessing ? "🔄 Procesando..." : "🔄 Procesar Datos"}
             </Button>
-            <Button variant="outline" onClick={() => setRawData("")} disabled={!rawData.trim()}>
+            <Button variant="outline" onClick={() => handleDataChange("")} disabled={!rawData.trim()}>
               🗑️ Limpiar
             </Button>
             <Button
@@ -190,6 +298,20 @@ VICO, NESTOR HUGO 2,03E+10 CEDEAR AMAZON.COM INC. 1 Pesos 1 1850 1850 MAE`
               📋 Ejemplo de Formato
             </Button>
           </div>
+
+          {/* Ayuda para formatos */}
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Formatos soportados:</strong>
+              <ul className="list-disc list-inside mt-1 text-sm">
+                <li>Datos copiados directamente de Excel/tablas</li>
+                <li>Texto separado por espacios múltiples</li>
+                <li>Texto separado por tabulaciones</li>
+                <li>Cada línea debe terminar con BYMA, MAV o MAE</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 
