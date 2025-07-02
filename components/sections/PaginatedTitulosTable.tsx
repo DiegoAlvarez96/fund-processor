@@ -50,10 +50,9 @@ const PaginatedTitulosTable = React.memo(
       setCurrentPage(1)
     }, [filtroMercado, searchTerm])
 
-    // Formatear números (memoizado)
-    const formatNumber = useCallback((value: string): string => {
-      const num = Number.parseFloat(value.replace(/,/g, ""))
-      return isNaN(num) ? value : num.toLocaleString("es-AR", { minimumFractionDigits: 2 })
+    // ✅ NO FORMATEAR NADA - MOSTRAR TAL CUAL VIENE
+    const displayValue = useCallback((value: string): string => {
+      return value || "0"
     }, [])
 
     // Obtener badge de mercado (memoizado)
@@ -140,12 +139,12 @@ const PaginatedTitulosTable = React.memo(
                   </div>
                   <div className="col-span-1 text-center text-sm">{operacion.plazo}</div>
                   <div className="col-span-1 text-sm truncate">{operacion.moneda}</div>
-                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.cantidadComprada)}</div>
-                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.precioPromedioCompra)}</div>
-                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.montoComprado)}</div>
-                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.cantidadVendida)}</div>
-                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.precioPromedioVenta)}</div>
-                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.montoVendido)}</div>
+                  <div className="col-span-1 text-right text-sm">{displayValue(operacion.cantidadComprada)}</div>
+                  <div className="col-span-1 text-right text-sm">{displayValue(operacion.precioPromedioCompra)}</div>
+                  <div className="col-span-1 text-right text-sm">{displayValue(operacion.montoComprado)}</div>
+                  <div className="col-span-1 text-right text-sm">{displayValue(operacion.cantidadVendida)}</div>
+                  <div className="col-span-1 text-right text-sm">{displayValue(operacion.precioPromedioVenta)}</div>
+                  <div className="col-span-1 text-right text-sm">{displayValue(operacion.montoVendido)}</div>
                   <div className="col-span-1">{getMercadoBadge(operacion.mercado)}</div>
                 </div>
               ))
