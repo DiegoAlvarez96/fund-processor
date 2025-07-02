@@ -1,41 +1,49 @@
 "use client"
 
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { Loader2 } from "lucide-react"
 
 interface ProgressModalProps {
+  /** Controla la apertura del modal */
   isOpen: boolean
-  progress: number
-  currentStep: string
-  processedItems: number
-  totalItems: number
+  /** Título que se muestra arriba de la barra */
+  title: string
+  /** Mensaje descriptivo de la etapa actual */
+  message: string
+  /** Registros procesados hasta el momento */
+  current: number
+  /** Registros totales a procesar */
+  total: number
 }
 
-export default function ProgressModal({
-  isOpen,
-  progress,
-  currentStep,
-  processedItems,
-  totalItems,
-}: ProgressModalProps) {
+/**
+ * Muestra un modal con barra de progreso bloqueando la interfaz
+ * hasta que finalice el procesamiento.
+ */
+export default function ProgressModal({ isOpen, title, message, current, total }: ProgressModalProps) {
+  const percentage = total > 0 ? Math.round((current / total) * 100) : 0
+
   return (
     <Dialog open={isOpen}>
       <DialogContent className="sm:max-w-md" hideCloseButton>
-        <div className="flex flex-col items-center space-y-6 py-6">
-          <div className="flex items-center space-x-3">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-            <h3 className="text-lg font-semibold">Procesando Datos</h3>
-          </div>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            {title}
+          </DialogTitle>
+        </DialogHeader>
 
-          <div className="w-full space-y-4">
-            <Progress value={progress} className="w-full h-3" />
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">{message}</p>
 
-            <div className="text-center space-y-1">
-              <p className="text-sm font-medium text-gray-700">{currentStep}</p>
-              <p className="text-xs text-gray-500">
-                {processedItems} de {totalItems} líneas procesadas ({Math.round(progress)}%)
-              </p>
+          <div className="space-y-2">
+            <Progress value={percentage} className="w-full" />
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>
+                {current} de {total}
+              </span>
+              <span>{percentage}%</span>
             </div>
           </div>
         </div>
