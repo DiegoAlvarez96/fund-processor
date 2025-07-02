@@ -140,7 +140,10 @@ function buscarColumna(headers: string[], nombres: string[]): number {
 }
 
 // Parser para Status Órdenes de Pago
-export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPago[]> {
+export async function parseStatusOrdenesPago(
+  file: File,
+  onProgress?: (current: number, total: number, message: string) => void,
+): Promise<StatusOrdenPago[]> {
   return new Promise(async (resolve, reject) => {
     const reader = new FileReader()
 
@@ -203,6 +206,8 @@ export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPag
           colEstado,
         })
 
+        // Primera pasada: procesar todos los registros
+        const totalFilas = jsonData.length - headerRow - 1
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
@@ -227,24 +232,33 @@ export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPag
               datosOriginales,
             }
 
-            // Si no hay CUIT pero hay número de comitente, buscarlo en la relación
-            if (!statusOrden.cuit && statusOrden.comitenteNumero) {
-              try {
-                const cuitEncontrado = await getCuitByComitente(statusOrden.comitenteNumero)
-                if (cuitEncontrado) {
-                  statusOrden.cuit = cuitEncontrado
-                  console.log(`✅ CUIT encontrado para comitente ${statusOrden.comitenteNumero}: ${cuitEncontrado}`)
-                }
-              } catch (error) {
-                console.warn(`⚠️ Error buscando CUIT para comitente ${statusOrden.comitenteNumero}:`, error)
-              }
-            }
-
             if (statusOrden.comitenteNumero || statusOrden.cuit) {
               resultados.push(statusOrden)
             }
           } catch (error) {
             console.error(`Error procesando fila ${i} de Status Órdenes:`, error)
+          }
+        }
+
+        // Segunda pasada: buscar CUITs faltantes
+        const registrosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
+        console.log(`🔍 Buscando CUITs para ${registrosSinCuit.length} registros sin CUIT...`)
+
+        for (let i = 0; i < registrosSinCuit.length; i++) {
+          const registro = registrosSinCuit[i]
+
+          if (onProgress) {
+            onProgress(i + 1, registrosSinCuit.length, `Buscando CUIT para comitente ${registro.comitenteNumero}`)
+          }
+
+          try {
+            const cuitEncontrado = await getCuitByComitente(registro.comitenteNumero)
+            if (cuitEncontrado) {
+              registro.cuit = cuitEncontrado
+              console.log(`✅ CUIT encontrado para comitente ${registro.comitenteNumero}: ${cuitEncontrado}`)
+            }
+          } catch (error) {
+            console.warn(`⚠️ Error buscando CUIT para comitente ${registro.comitenteNumero}:`, error)
           }
         }
 
@@ -366,11 +380,14 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
 }
 
 // Parser para Recibos de Pago
-export async function parseRecibosPago(file: File): Promise<ReciboPago[]> {
-  return new Promise((resolve, reject) => {
+export async function parseRecibosPago(
+  file: File,
+  onProgress?: (current: number, total: number, message: string) => void,
+): Promise<ReciboPago[]> {
+  return new Promise(async (resolve, reject) => {
     const reader = new FileReader()
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: "array" })
@@ -425,6 +442,7 @@ export async function parseRecibosPago(file: File): Promise<ReciboPago[]> {
           colCuit,
         })
 
+        // Primera pasada: procesar todos los registros
         for (let i = headerRow + 1; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
@@ -455,6 +473,28 @@ export async function parseRecibosPago(file: File): Promise<ReciboPago[]> {
             }
           } catch (error) {
             console.error(`Error procesando fila ${i} de Recibos:`, error)
+          }
+        }
+
+        // Segunda pasada: buscar CUITs faltantes
+        const recibosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
+        console.log(`🔍 Buscando CUITs para ${recibosSinCuit.length} recibos sin CUIT...`)
+
+        for (let i = 0; i < recibosSinCuit.length; i++) {
+          const recibo = recibosSinCuit[i]
+
+          if (onProgress) {
+            onProgress(i + 1, recibosSinCuit.length, `Buscando CUIT para recibo comitente ${recibo.comitenteNumero}`)
+          }
+
+          try {
+            const cuitEncontrado = await getCuitByComitente(recibo.comitenteNumero)
+            if (cuitEncontrado) {
+              recibo.cuit = cuitEncontrado
+              console.log(`✅ CUIT encontrado para recibo comitente ${recibo.comitenteNumero}: ${cuitEncontrado}`)
+            }
+          } catch (error) {
+            console.warn(`⚠️ Error buscando CUIT para recibo comitente ${recibo.comitenteNumero}:`, error)
           }
         }
 
@@ -543,8 +583,8 @@ export async function parseMovimientosBancarios(file: File): Promise<{
               }
             })
 
-            // Filtrar solo movimientos "C" para conciliación
-            if (dc === "C") {
+            // Filtrar solo movimientos "D" (débitos) para conciliación
+            if (dc === "D") {
               // Desestimar CUIT 30604731018
               if (cuit === "30604731018") {
                 continue
