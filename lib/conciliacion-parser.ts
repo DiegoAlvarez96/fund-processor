@@ -25,21 +25,65 @@ function convertirFecha(fechaStr: string): string {
       return fechaStr
     }
 
-    // Convertir formato "Jun 27 2025 12:00AM"
-    const fecha = new Date(fechaStr)
-    if (isNaN(fecha.getTime())) {
-      console.warn(`Fecha no válida: ${fechaStr}`)
-      return fechaStr
+    // Manejar formato "Jun 27 2025 12:00AM"
+    if (typeof fechaStr === "string" && fechaStr.includes(" ")) {
+      const partes = fechaStr.split(" ")
+      if (partes.length >= 3) {
+        const mesStr = partes[0]
+        const dia = partes[1]
+        const año = partes[2]
+
+        // Mapear nombres de meses
+        const meses: Record<string, string> = {
+          Jan: "01",
+          Feb: "02",
+          Mar: "03",
+          Apr: "04",
+          May: "05",
+          Jun: "06",
+          Jul: "07",
+          Aug: "08",
+          Sep: "09",
+          Oct: "10",
+          Nov: "11",
+          Dec: "12",
+        }
+
+        const mes = meses[mesStr]
+        if (mes) {
+          return `${dia.padStart(2, "0")}/${mes}/${año}`
+        }
+      }
     }
 
-    const dia = fecha.getDate().toString().padStart(2, "0")
-    const mes = (fecha.getMonth() + 1).toString().padStart(2, "0")
-    const año = fecha.getFullYear()
+    // Manejar número de serie de Excel (como 45835.69652777778)
+    if (typeof fechaStr === "number" || !isNaN(Number(fechaStr))) {
+      const numeroSerie = Number(fechaStr)
+      // Convertir número de serie de Excel a fecha
+      const fecha = new Date((numeroSerie - 25569) * 86400 * 1000)
 
-    return `${dia}/${mes}/${año}`
+      if (!isNaN(fecha.getTime())) {
+        const dia = fecha.getDate().toString().padStart(2, "0")
+        const mes = (fecha.getMonth() + 1).toString().padStart(2, "0")
+        const año = fecha.getFullYear()
+        return `${dia}/${mes}/${año}`
+      }
+    }
+
+    // Intentar conversión estándar como último recurso
+    const fecha = new Date(fechaStr)
+    if (!isNaN(fecha.getTime())) {
+      const dia = fecha.getDate().toString().padStart(2, "0")
+      const mes = (fecha.getMonth() + 1).toString().padStart(2, "0")
+      const año = fecha.getFullYear()
+      return `${dia}/${mes}/${año}`
+    }
+
+    console.warn(`Fecha no válida: ${fechaStr}`)
+    return fechaStr.toString()
   } catch (error) {
     console.error(`Error convirtiendo fecha: ${fechaStr}`, error)
-    return fechaStr
+    return fechaStr.toString()
   }
 }
 
@@ -48,14 +92,19 @@ function convertirImporte(importeStr: string): number {
   if (!importeStr) return 0
 
   // Remover símbolos de moneda y espacios
-  let limpio = importeStr.toString().replace(/[$\s]/g, "").replace(/,/g, "")
+  let limpio = importeStr.toString().replace(/[$\s]/g, "")
 
-  // Si tiene punto como separador decimal, convertir
-  if (limpio.includes(".")) {
-    limpio = limpio.replace(".", ",")
+  // Reemplazar comas por puntos para decimales
+  limpio = limpio.replace(/,/g, ".")
+
+  // Si hay múltiples puntos, el último es decimal
+  const puntos = limpio.split(".")
+  if (puntos.length > 2) {
+    // Unir todos menos el último (miles) y mantener el último como decimal
+    limpio = puntos.slice(0, -1).join("") + "." + puntos[puntos.length - 1]
   }
 
-  return Number.parseFloat(limpio.replace(",", ".")) || 0
+  return Number.parseFloat(limpio) || 0
 }
 
 // Función para extraer CUIT del beneficiario
@@ -143,7 +192,7 @@ export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPag
         const colCuit = buscarColumna(headers, ["cuit"])
         const colEstado = buscarColumna(headers, ["estado"])
 
-        console.log("Índices encontrados:", {
+        console.log("Índices Status Órdenes:", {
           colFecha,
           colComitenteNum,
           colComitenteDesc,
@@ -430,7 +479,7 @@ export async function parseMovimientosBancarios(file: File): Promise<{
 
         const moneda = inferirMoneda(file.name)
 
-        // Para movimientos bancarios: primera fila se omite, segunda fila son headers, tercera fila en adelante es contenido
+        // Para movimientos bancarios: primera fila se omite, segunda fila son headers (índice 1), tercera fila en adelante es contenido (índice 2+)
         const headerRow = 1 // Segunda fila (índice 1)
 
         if (jsonData.length < 3) {
@@ -442,7 +491,7 @@ export async function parseMovimientosBancarios(file: File): Promise<{
         const headers = jsonData[headerRow] || []
         console.log("Headers Movimientos Bancarios:", headers)
 
-        // Buscar índices de columnas
+        // Buscar índices de columnas específicos según tu ejemplo
         const colFecha = buscarColumna(headers, ["fecha"])
         const colBeneficiario = buscarColumna(headers, ["beneficiario"])
         const colDC = buscarColumna(headers, ["d/c", "dc"])
@@ -454,6 +503,11 @@ export async function parseMovimientosBancarios(file: File): Promise<{
           colDC,
           colImporte,
         })
+
+        // Verificar que encontramos las columnas esperadas
+        if (colFecha !== 0 || colBeneficiario !== 4 || colDC !== 8 || colImporte !== 9) {
+          console.warn("Índices no coinciden con el formato esperado, usando los encontrados")
+        }
 
         // Procesar desde la tercera fila (índice 2)
         for (let i = headerRow + 1; i < jsonData.length; i++) {
