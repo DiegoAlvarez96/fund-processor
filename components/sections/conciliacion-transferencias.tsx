@@ -805,8 +805,8 @@ export default function ConciliacionTransferencias() {
           {/* Transferencias Monetarias */}
           <Card>
             <CardHeader>
-              <CardTitle>💰 Transferencias Monetarias y Mercados</CardTitle>
-              <p className="text-sm text-gray-500">CUIT: 30711610126</p>
+              <CardTitle>💰 Transferencias Monetarias</CardTitle>
+              <p className="text-sm text-gray-500">CUIT: 30711610126 (Débitos y Créditos)</p>
             </CardHeader>
             <CardContent>
               <div className="max-h-64 overflow-y-auto overflow-x-auto">
@@ -853,7 +853,7 @@ export default function ConciliacionTransferencias() {
           <Card>
             <CardHeader>
               <CardTitle>📈 Mercados (BYMA)</CardTitle>
-              <p className="text-sm text-gray-500">BYMA S.A. BOLSAS Y MERCADOS AR - 30711610126</p>
+              <p className="text-sm text-gray-500">BYMA S.A. BOLSAS Y MERCADOS AR - 30711610126 (Débitos y Créditos)</p>
             </CardHeader>
             <CardContent>
               <div className="max-h-64 overflow-y-auto overflow-x-auto">
