@@ -102,16 +102,20 @@ const PaginatedTitulosTable = React.memo(
 
         {/* Tabla */}
         <div className="border rounded-lg overflow-hidden">
+          {/* Headers de datos desde fila 6 */}
           <div className="bg-gray-50 px-4 py-2">
             <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-700">
               <div className="col-span-2">Cliente</div>
               <div className="col-span-1">CUIT/CUIL</div>
-              <div className="col-span-3">Especie</div>
+              <div className="col-span-2">Especie</div>
               <div className="col-span-1">Plazo</div>
               <div className="col-span-1">Moneda</div>
               <div className="col-span-1">Cant. Comp.</div>
               <div className="col-span-1">Precio Comp.</div>
+              <div className="col-span-1">Monto Comp.</div>
               <div className="col-span-1">Cant. Vend.</div>
+              <div className="col-span-1">Precio Vend.</div>
+              <div className="col-span-1">Monto Vend.</div>
               <div className="col-span-1">Mercado</div>
             </div>
           </div>
@@ -131,14 +135,17 @@ const PaginatedTitulosTable = React.memo(
                   <div className="col-span-1 font-mono text-xs truncate" title={operacion.cuitCuil}>
                     {operacion.cuitCuil}
                   </div>
-                  <div className="col-span-3 text-sm truncate" title={operacion.especie}>
+                  <div className="col-span-2 text-sm truncate" title={operacion.especie}>
                     {operacion.especie}
                   </div>
                   <div className="col-span-1 text-center text-sm">{operacion.plazo}</div>
                   <div className="col-span-1 text-sm truncate">{operacion.moneda}</div>
                   <div className="col-span-1 text-right text-sm">{formatNumber(operacion.cantidadComprada)}</div>
                   <div className="col-span-1 text-right text-sm">{formatNumber(operacion.precioPromedioCompra)}</div>
+                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.montoComprado)}</div>
                   <div className="col-span-1 text-right text-sm">{formatNumber(operacion.cantidadVendida)}</div>
+                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.precioPromedioVenta)}</div>
+                  <div className="col-span-1 text-right text-sm">{formatNumber(operacion.montoVendido)}</div>
                   <div className="col-span-1">{getMercadoBadge(operacion.mercado)}</div>
                 </div>
               ))
