@@ -9,6 +9,7 @@ import type {
   MovimientoMercado,
   ResultadoConciliacion,
 } from "./conciliacion-types"
+import { getCuitByComitente } from "./comitente-lookup"
 
 // Función para limpiar CUIT (eliminar guiones)
 function limpiarCuit(cuit: string): string {
@@ -59,13 +60,13 @@ function convertirFecha(fechaStr: string): string {
     // Manejar número de serie de Excel (como 45835.69652777778)
     if (typeof fechaStr === "number" || !isNaN(Number(fechaStr))) {
       const numeroSerie = Number(fechaStr)
-      // Convertir número de serie de Excel a fecha
-      const fecha = new Date((numeroSerie - 25569) * 86400 * 1000)
+      // Convertir número de serie de Excel a fecha (corregido para UTC)
+      const fecha = new Date(Date.UTC(1900, 0, numeroSerie - 1))
 
       if (!isNaN(fecha.getTime())) {
-        const dia = fecha.getDate().toString().padStart(2, "0")
-        const mes = (fecha.getMonth() + 1).toString().padStart(2, "0")
-        const año = fecha.getFullYear()
+        const dia = fecha.getUTCDate().toString().padStart(2, "0")
+        const mes = (fecha.getUTCMonth() + 1).toString().padStart(2, "0")
+        const año = fecha.getUTCFullYear()
         return `${dia}/${mes}/${año}`
       }
     }
@@ -140,10 +141,10 @@ function buscarColumna(headers: string[], nombres: string[]): number {
 
 // Parser para Status Órdenes de Pago
 export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPago[]> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     const reader = new FileReader()
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: "array" })
@@ -224,6 +225,19 @@ export async function parseStatusOrdenesPago(file: File): Promise<StatusOrdenPag
               cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
               estado: colEstado >= 0 ? row[colEstado]?.toString() || "" : "",
               datosOriginales,
+            }
+
+            // Si no hay CUIT pero hay número de comitente, buscarlo en la relación
+            if (!statusOrden.cuit && statusOrden.comitenteNumero) {
+              try {
+                const cuitEncontrado = await getCuitByComitente(statusOrden.comitenteNumero)
+                if (cuitEncontrado) {
+                  statusOrden.cuit = cuitEncontrado
+                  console.log(`✅ CUIT encontrado para comitente ${statusOrden.comitenteNumero}: ${cuitEncontrado}`)
+                }
+              } catch (error) {
+                console.warn(`⚠️ Error buscando CUIT para comitente ${statusOrden.comitenteNumero}:`, error)
+              }
             }
 
             if (statusOrden.comitenteNumero || statusOrden.cuit) {
