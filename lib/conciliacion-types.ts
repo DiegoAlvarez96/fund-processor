@@ -1,4 +1,4 @@
-// Tipos para Status Órdenes de Pago
+// Tipos base para Status Órdenes de Pago
 export interface StatusOrdenPago {
   fechaConcertacion: string
   comitenteNumero: string
@@ -7,6 +7,9 @@ export interface StatusOrdenPago {
   importe: number
   cuit: string
   estado: string
+  especie?: string
+  plazo?: string
+  mercado?: string
   datosOriginales: Record<string, any>
 }
 
@@ -21,7 +24,7 @@ export interface ConfirmacionSolicitud {
   datosOriginales: Record<string, any>
 }
 
-// Tipo unificado para Solicitudes de Pago
+// Tipos para Solicitudes de Pago (unión de Status y Confirmación)
 export interface SolicitudPago {
   id: string
   fecha: string
@@ -88,18 +91,57 @@ export interface MovimientoMercado {
   datosOriginales: Record<string, any>
 }
 
-// Tipo para el resultado de la conciliación
+// Estadísticas de conciliación
+export interface EstadisticasConciliacion {
+  totalSolicitudes: number
+  totalRecibos: number
+  totalMovimientos: number
+  conciliadosCompletos: number
+  noConciliados: number
+}
+
+// Resultado completo de la conciliación
 export interface ResultadoConciliacion {
   solicitudesPago: SolicitudPago[]
   recibosPago: ReciboPago[]
   movimientosBancarios: MovimientoBancario[]
   transferenciasMonetarias: TransferenciaMonetaria[]
   movimientosMercados: MovimientoMercado[]
-  estadisticas: {
-    totalSolicitudes: number
-    totalRecibos: number
-    totalMovimientos: number
-    conciliadosCompletos: number
+  estadisticas: EstadisticasConciliacion
+}
+
+// Tipos para exportación a Excel
+export interface ResumenConciliacion {
+  solicitudes: {
+    cantidad: number
+    importeTotal: number
+    conciliados: number
     noConciliados: number
+  }
+  recibos: {
+    cantidad: number
+    importeTotal: number
+    conciliados: number
+    noConciliados: number
+  }
+  movimientos: {
+    cantidad: number
+    importeTotal: number
+    conciliados: number
+    noConciliados: number
+  }
+  diferencias: {
+    solicitudesVsRecibos: {
+      cantidad: number
+      importe: number
+    }
+    solicitudesVsMovimientos: {
+      cantidad: number
+      importe: number
+    }
+    recibosVsMovimientos: {
+      cantidad: number
+      importe: number
+    }
   }
 }
