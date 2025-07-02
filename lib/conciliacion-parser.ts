@@ -40,7 +40,7 @@ function limpiarCuit(cuit: string): string {
   return cuitLimpio
 }
 
-// Función para convertir fecha de formato "Jun 27 2025 12:00AM" a "27/06/2025"
+// Función para convertir fecha de formato "Jul 27 2025 12:00AM" a "27/06/2025"
 function convertirFecha(fechaStr: string): string {
   if (!fechaStr) return ""
 
@@ -50,15 +50,18 @@ function convertirFecha(fechaStr: string): string {
       return fechaStr
     }
 
-    // Manejar formato "Jun 27 2025 12:00AM"
+    // Manejar formato "Jul 1 2025 12:00AM" o "Jul  1 2025 12:00AM" (con doble espacio)
     if (typeof fechaStr === "string" && fechaStr.includes(" ")) {
-      const partes = fechaStr.split(" ")
+      // Normalizar espacios múltiples a uno solo
+      const fechaNormalizada = fechaStr.replace(/\s+/g, " ")
+      const partes = fechaNormalizada.split(" ")
+
       if (partes.length >= 3) {
         const mesStr = partes[0]
-        const dia = partes[1]
+        const dia = partes[1].padStart(2, "0") // Asegurar que el día tenga 2 dígitos
         const año = partes[2]
 
-        // Mapear nombres de meses
+        // Mapear nombres de meses en inglés
         const meses: Record<string, string> = {
           Jan: "01",
           Feb: "02",
@@ -76,7 +79,7 @@ function convertirFecha(fechaStr: string): string {
 
         const mes = meses[mesStr]
         if (mes) {
-          return `${dia.padStart(2, "0")}/${mes}/${año}`
+          return `${dia}/${mes}/${año}`
         }
       }
     }
@@ -110,6 +113,38 @@ function convertirFecha(fechaStr: string): string {
     console.error(`Error convirtiendo fecha: ${fechaStr}`, error)
     return fechaStr.toString()
   }
+}
+
+// Función para extraer símbolo de moneda de texto como "Pesos / $" o "Dolar MEP (Local) / USD D"
+function extraerSimboloMoneda(monedaStr: string): string {
+  if (!monedaStr) return "$" // Por defecto, pesos
+
+  const monedaUpper = monedaStr.toUpperCase()
+
+  // Buscar patrones específicos
+  if (monedaUpper.includes("USD") || monedaUpper.includes("DOLAR") || monedaUpper.includes("DÓLAR")) {
+    return "USD"
+  }
+
+  // Si contiene "/", extraer la parte después del "/"
+  if (monedaStr.includes("/")) {
+    const partes = monedaStr.split("/")
+    const simbolo = partes[1].trim()
+    if (simbolo === "$" || simbolo.startsWith("$")) {
+      return "$"
+    }
+    if (simbolo.includes("USD")) {
+      return "USD"
+    }
+    return simbolo
+  }
+
+  // Si es "Pesos" o similar
+  if (monedaUpper.includes("PESO")) {
+    return "$"
+  }
+
+  return monedaStr // Devolver tal cual si no se reconoce
 }
 
 // Función para convertir importe de texto a número
@@ -190,6 +225,14 @@ function esBeneficiarioMercado(beneficiario: string): boolean {
   ]
 
   return patronesMercados.some((patron) => beneficiarioUpper.includes(patron))
+}
+
+// Función para verificar si un beneficiario es un impuesto (solo contiene guiones)
+function esImpuesto(beneficiario: string): boolean {
+  if (!beneficiario) return false
+
+  // Verificar si solo contiene guiones o espacios
+  return /^[-\s]+$/.test(beneficiario)
 }
 
 // Función optimizada para buscar CUIT con cache y lotes
@@ -400,11 +443,15 @@ export async function parseStatusOrdenesPago(
               mercado = detectarMercado(especie) || detectarMercado(descripcion)
             }
 
+            // Extraer y convertir moneda
+            const monedaTexto = colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$"
+            const moneda = extraerSimboloMoneda(monedaTexto)
+
             const statusOrden: StatusOrdenPago = {
               fechaConcertacion: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
               comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
               comitenteDescripcion: colComitenteDesc >= 0 ? row[colComitenteDesc]?.toString() || "" : "",
-              moneda: colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$",
+              moneda: moneda,
               importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
               cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
               estado: colEstado >= 0 ? row[colEstado]?.toString() || "PENDIENTE" : "PENDIENTE",
@@ -529,12 +576,16 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
               })
             }
 
+            // Extraer y convertir moneda
+            const monedaTexto = colMonedaDesc >= 0 ? row[colMonedaDesc]?.toString() || "$" : "$"
+            const moneda = extraerSimboloMoneda(monedaTexto)
+
             const confirmacion: ConfirmacionSolicitud = {
               fecha: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
               estado: colEstado >= 0 ? row[colEstado]?.toString() || "PENDIENTE" : "PENDIENTE",
               comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
               comitenteDenominacion: colComitenteDenom >= 0 ? row[colComitenteDenom]?.toString() || "" : "",
-              monedaDescripcion: colMonedaDesc >= 0 ? row[colMonedaDesc]?.toString() || "$" : "$",
+              monedaDescripcion: moneda,
               importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
               // NUEVA: Leer y limpiar CUIT de Confirmación de Solicitudes
               cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
@@ -591,7 +642,8 @@ export async function parseRecibosPago(
           colComitenteDenom = -1,
           colComitenteNum = -1
         let colImporte = -1,
-          colCuit = -1
+          colCuit = -1,
+          colMoneda = -1
 
         if (hayHeaders) {
           headers = jsonData[headerRow] || []
@@ -607,6 +659,7 @@ export async function parseRecibosPago(
           colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero", "cliente"])
           colImporte = buscarColumna(headers, ["importe"])
           colCuit = buscarColumna(headers, ["cuit/cuil titular", "cuit", "cuil"])
+          colMoneda = buscarColumna(headers, ["moneda", "moneda descripción", "moneda descripcion"])
         } else {
           // Orden estándar sin headers
           colFechaLiq = 0
@@ -614,6 +667,7 @@ export async function parseRecibosPago(
           colComitenteNum = 2
           colImporte = 3
           colCuit = 4
+          colMoneda = 5
         }
 
         console.log("Índices Recibos:", {
@@ -622,6 +676,7 @@ export async function parseRecibosPago(
           colComitenteNum,
           colImporte,
           colCuit,
+          colMoneda,
         })
 
         // Primera pasada: procesar todos los registros
@@ -644,6 +699,10 @@ export async function parseRecibosPago(
               })
             }
 
+            // Extraer y convertir moneda
+            const monedaTexto = colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$"
+            const moneda = extraerSimboloMoneda(monedaTexto)
+
             const recibo: ReciboPago = {
               id: `recibo-${Date.now()}-${i}`,
               fechaLiquidacion: convertirFecha(colFechaLiq >= 0 ? row[colFechaLiq]?.toString() || "" : ""),
@@ -651,6 +710,7 @@ export async function parseRecibosPago(
               comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
               importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
               cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
+              moneda: moneda, // Agregar moneda al recibo
               conciliadoSolicitudes: false,
               conciliadoMovimientos: false,
               datosOriginales,
@@ -747,6 +807,12 @@ export async function parseMovimientosBancarios(file: File): Promise<{
             const dc = colDC >= 0 ? row[colDC]?.toString().toUpperCase() || "" : ""
             const importe = convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0")
             const cuit = extraerCuitBeneficiario(beneficiario)
+
+            // NUEVO: Ignorar movimientos con beneficiario que solo contiene guiones (impuestos)
+            if (esImpuesto(beneficiario)) {
+              console.log(`⚠️ Ignorando movimiento de impuesto: ${beneficiario}`)
+              continue
+            }
 
             // Crear objeto con datos originales
             const datosOriginales: Record<string, any> = {}
@@ -937,7 +1003,9 @@ export function realizarConciliacion(
 
   // Indexar recibos
   recibos.forEach((recibo) => {
-    const clave = generarClaveConciliacion(recibo.fechaLiquidacion, recibo.cuit, "$", recibo.importe) // Asumir pesos por defecto
+    // Usar la moneda del recibo si está disponible, de lo contrario asumir pesos
+    const moneda = recibo.moneda || "$"
+    const clave = generarClaveConciliacion(recibo.fechaLiquidacion, recibo.cuit, moneda, recibo.importe)
     if (!mapaRecibos.has(clave)) {
       mapaRecibos.set(clave, [])
     }
@@ -977,7 +1045,9 @@ export function realizarConciliacion(
 
   // Conciliar recibos con movimientos
   recibos.forEach((recibo) => {
-    const clave = generarClaveConciliacion(recibo.fechaLiquidacion, recibo.cuit, "$", recibo.importe)
+    // Usar la moneda del recibo si está disponible, de lo contrario asumir pesos
+    const moneda = recibo.moneda || "$"
+    const clave = generarClaveConciliacion(recibo.fechaLiquidacion, recibo.cuit, moneda, recibo.importe)
 
     if (mapaMovimientos.has(clave)) {
       recibo.conciliadoMovimientos = true
