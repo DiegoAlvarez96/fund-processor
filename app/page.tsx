@@ -7,10 +7,10 @@ import { FileSpreadsheet, Building2, TrendingUp, Calculator, ArrowRightLeft } fr
 
 // Importar componentes
 import FundProcessor from "@/components/sections/FundProcessor"
-import BankFiles from "@/components/sections/BankFiles"
+import BankFiles from "@/components/sections/bank-file-processor"
 import TitulosProcessor from "@/components/sections/TitulosProcessor"
 import Dashboard from "@/components/sections/Dashboard"
-import ConciliacionTransferencias from "@/components/sections/ConciliacionTransferencias"
+import ConciliacionTransferencias from "@/components/sections/conciliacion-transferencias"
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState("dashboard")
