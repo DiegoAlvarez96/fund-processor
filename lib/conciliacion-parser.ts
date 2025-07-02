@@ -119,20 +119,26 @@ function convertirFecha(fechaStr: string): string {
 function extraerSimboloMoneda(monedaStr: string): string {
   if (!monedaStr) return "$" // Por defecto, pesos
 
-  const monedaUpper = monedaStr.toUpperCase().trim()
+  const monedaLimpia = monedaStr.toString().trim()
+  const monedaUpper = monedaLimpia.toUpperCase()
 
-  // Si es exactamente "USD D", devolver "USD"
-  if (monedaUpper === "USD D") {
+  console.log(`🔍 Extrayendo moneda de: "${monedaStr}" -> Upper: "${monedaUpper}"`)
+
+  // Si contiene "USD" en cualquier parte, es USD
+  if (monedaUpper.includes("USD")) {
+    console.log(`✅ Detectado USD en: "${monedaStr}"`)
     return "USD"
   }
 
   // Si es exactamente "$", devolver "$"
-  if (monedaStr.trim() === "$") {
+  if (monedaLimpia === "$") {
+    console.log(`✅ Detectado $ en: "${monedaStr}"`)
     return "$"
   }
 
-  // Buscar patrones específicos
-  if (monedaUpper.includes("USD") || monedaUpper.includes("DOLAR") || monedaUpper.includes("DÓLAR")) {
+  // Buscar patrones específicos de dólar
+  if (monedaUpper.includes("DOLAR") || monedaUpper.includes("DÓLAR") || monedaUpper.includes("DOLLAR")) {
+    console.log(`✅ Detectado dólar por palabra clave en: "${monedaStr}"`)
     return "USD"
   }
 
@@ -140,11 +146,12 @@ function extraerSimboloMoneda(monedaStr: string): string {
   if (monedaStr.includes("/")) {
     const partes = monedaStr.split("/")
     const simbolo = partes[1].trim()
+    console.log(`🔍 Parte después de /: "${simbolo}"`)
 
     if (simbolo === "$") {
       return "$"
     }
-    if (simbolo.toUpperCase().includes("USD") || simbolo.toUpperCase() === "USD D") {
+    if (simbolo.toUpperCase().includes("USD")) {
       return "USD"
     }
     return simbolo
@@ -152,13 +159,15 @@ function extraerSimboloMoneda(monedaStr: string): string {
 
   // Si es "Pesos" o similar
   if (monedaUpper.includes("PESO")) {
+    console.log(`✅ Detectado peso por palabra clave en: "${monedaStr}"`)
     return "$"
   }
 
+  console.log(`⚠️ No se pudo determinar moneda, usando $ por defecto para: "${monedaStr}"`)
   return "$" // Por defecto, pesos
 }
 
-// Función para convertir importe de texto a número - MEJORADA para USD
+// Función para convertir importe de texto a número - MEJORADA para manejar "US$ 1,010,342.68"
 function convertirImporte(importeStr: string): number {
   if (!importeStr) return 0
 
@@ -168,9 +177,21 @@ function convertirImporte(importeStr: string): number {
   // Si está vacío después del trim, devolver 0
   if (!limpio) return 0
 
-  // Remover símbolos de moneda y espacios, pero mantener signos negativos
+  console.log(`🔍 Convirtiendo importe: "${importeStr}"`)
+
+  // Detectar si es negativo
   const esNegativo = limpio.startsWith("-")
-  limpio = limpio.replace(/[$\s-]/g, "")
+
+  // Remover símbolos de moneda específicos: US$, $, USD, etc.
+  limpio = limpio.replace(/^-?US\$\s*/, "") // Remover "US$" al inicio
+  limpio = limpio.replace(/^-?\$\s*/, "") // Remover "$" al inicio
+  limpio = limpio.replace(/USD\s*/gi, "") // Remover "USD" en cualquier parte
+  limpio = limpio.replace(/^-/, "") // Remover signo negativo temporal
+
+  // Remover espacios adicionales
+  limpio = limpio.trim()
+
+  console.log(`🔍 Después de limpiar símbolos: "${limpio}"`)
 
   // Si después de limpiar está vacío, devolver 0
   if (!limpio) return 0
@@ -180,7 +201,9 @@ function convertirImporte(importeStr: string): number {
     try {
       const numero = Number.parseFloat(limpio)
       if (!isNaN(numero)) {
-        return esNegativo ? -numero : numero
+        const resultado = esNegativo ? -numero : numero
+        console.log(`✅ Formato científico convertido: ${resultado}`)
+        return resultado
       }
     } catch (error) {
       console.warn(`Error convirtiendo importe científico: ${importeStr}`)
@@ -188,24 +211,50 @@ function convertirImporte(importeStr: string): number {
     }
   }
 
-  // Reemplazar comas por puntos para decimales
-  limpio = limpio.replace(/,/g, ".")
+  // Manejar formato con comas como separadores de miles (ej: 1,010,342.68)
+  // Si hay comas Y puntos, las comas son separadores de miles
+  if (limpio.includes(",") && limpio.includes(".")) {
+    // Verificar que el punto esté después de la última coma (formato americano)
+    const ultimaComa = limpio.lastIndexOf(",")
+    const ultimoPunto = limpio.lastIndexOf(".")
 
-  // Si hay múltiples puntos, el último es decimal
-  const puntos = limpio.split(".")
-  if (puntos.length > 2) {
-    // Unir todos menos el último (miles) y mantener el último como decimal
-    limpio = puntos.slice(0, -1).join("") + "." + puntos[puntos.length - 1]
+    if (ultimoPunto > ultimaComa) {
+      // Formato americano: 1,010,342.68
+      limpio = limpio.replace(/,/g, "") // Remover todas las comas
+      console.log(`🔍 Formato americano detectado, después de remover comas: "${limpio}"`)
+    }
+  } else if (limpio.includes(",") && !limpio.includes(".")) {
+    // Solo comas, podría ser separador decimal europeo o separador de miles
+    const comas = (limpio.match(/,/g) || []).length
+    if (comas === 1) {
+      // Una sola coma, probablemente decimal europeo
+      const partes = limpio.split(",")
+      if (partes[1].length <= 2) {
+        // Decimal europeo (ej: 1234,56)
+        limpio = limpio.replace(",", ".")
+        console.log(`🔍 Formato europeo detectado: "${limpio}"`)
+      } else {
+        // Separador de miles (ej: 1,234)
+        limpio = limpio.replace(",", "")
+        console.log(`🔍 Separador de miles detectado: "${limpio}"`)
+      }
+    } else {
+      // Múltiples comas, separadores de miles
+      limpio = limpio.replace(/,/g, "")
+      console.log(`🔍 Múltiples separadores de miles: "${limpio}"`)
+    }
   }
 
   const numero = Number.parseFloat(limpio)
 
   if (isNaN(numero)) {
-    console.warn(`No se pudo convertir importe: ${importeStr}`)
+    console.warn(`⚠️ No se pudo convertir importe: "${importeStr}" -> "${limpio}"`)
     return 0
   }
 
-  return esNegativo ? -numero : numero
+  const resultado = esNegativo ? -numero : numero
+  console.log(`✅ Importe convertido: "${importeStr}" -> ${resultado}`)
+  return resultado
 }
 
 // Función para extraer CUIT del beneficiario
@@ -361,6 +410,8 @@ function tieneHeaders(primeraFila: any[]): boolean {
     "denominacion",
     "anulado",
     "titular",
+    "símbolo",
+    "simbolo",
   ]
 
   const textoFila = primeraFila.join(" ").toLowerCase()
@@ -703,12 +754,14 @@ export async function parseRecibosPago(
           colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero", "cliente"])
           colImporte = buscarColumna(headers, ["importe"])
           colCuit = buscarColumna(headers, ["cuit/cuil titular", "cuit", "cuil"])
-          // NUEVA: Buscar columna de moneda específica "Titular Moneda (Símbolo)"
+          // CORREGIDA: Buscar columna de moneda específica "Moneda (Símbolo)"
           colMoneda = buscarColumna(headers, [
+            "moneda (símbolo)",
+            "moneda símbolo",
+            "moneda (simbolo)",
+            "moneda simbolo",
             "titular moneda (símbolo)",
             "titular moneda símbolo",
-            "moneda símbolo",
-            "moneda (símbolo)",
             "moneda",
           ])
           // NUEVA: Buscar columna "esta anulado"
@@ -768,7 +821,7 @@ export async function parseRecibosPago(
             const monedaTexto = colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$"
             const moneda = extraerSimboloMoneda(monedaTexto)
 
-            console.log(`Fila ${i + 1}: Moneda original: "${monedaTexto}" -> Convertida: "${moneda}"`)
+            console.log(`📋 Fila ${i + 1}: Moneda original: "${monedaTexto}" -> Convertida: "${moneda}"`)
 
             const recibo: ReciboPago = {
               id: `recibo-${Date.now()}-${i}`,
@@ -878,7 +931,7 @@ export async function parseMovimientosBancarios(file: File): Promise<{
 
             // Debug para importes USD
             if (moneda === "USD") {
-              console.log(`Fila ${i + 1} USD: Importe original: "${importeStr}" -> Convertido: ${importe}`)
+              console.log(`💰 Fila ${i + 1} USD: Importe original: "${importeStr}" -> Convertido: ${importe}`)
             }
 
             // NUEVO: Ignorar movimientos con beneficiario que solo contiene guiones (impuestos)
