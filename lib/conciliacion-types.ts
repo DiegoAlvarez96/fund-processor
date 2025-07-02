@@ -1,5 +1,4 @@
-// Tipos base para los datos de conciliación
-
+// Tipos base para los datos de entrada
 export interface StatusOrdenPago {
   fechaConcertacion: string
   comitenteNumero: string
@@ -8,9 +7,9 @@ export interface StatusOrdenPago {
   importe: number
   cuit: string
   estado: string
-  especie?: string
-  plazo?: string
-  mercado?: string
+  especie: string
+  plazo: string
+  mercado: string
   datosOriginales: Record<string, any>
 }
 
@@ -21,11 +20,11 @@ export interface ConfirmacionSolicitud {
   comitenteDenominacion: string
   monedaDescripcion: string
   importe: number
-  cuit: string // NUEVA: Agregar CUIT a Confirmación de Solicitudes
+  cuit: string
   datosOriginales: Record<string, any>
 }
 
-// Tipos de conciliación
+// Tipos para conciliación
 export type TipoConciliacion = "completa" | "por-importe" | "no-conciliado"
 
 export interface SolicitudPago {
@@ -40,7 +39,6 @@ export interface SolicitudPago {
   origen: "status" | "confirmacion"
   conciliadoRecibos: boolean
   conciliadoMovimientos: boolean
-  // NUEVOS: Campos para conciliación por importe
   conciliadoRecibosPorImporte: boolean
   conciliadoMovimientosPorImporte: boolean
   tipoConciliacion: TipoConciliacion
@@ -54,10 +52,9 @@ export interface ReciboPago {
   comitenteNumero: string
   importe: number
   cuit: string
-  moneda?: string // Agregar moneda a ReciboPago
+  moneda: string
   conciliadoSolicitudes: boolean
   conciliadoMovimientos: boolean
-  // NUEVOS: Campos para conciliación por importe
   conciliadoSolicitudesPorImporte: boolean
   conciliadoMovimientosPorImporte: boolean
   tipoConciliacion: TipoConciliacion
@@ -74,7 +71,6 @@ export interface MovimientoBancario {
   moneda: string
   conciliadoSolicitudes: boolean
   conciliadoRecibos: boolean
-  // NUEVOS: Campos para conciliación por importe
   conciliadoSolicitudesPorImporte: boolean
   conciliadoRecibosPorImporte: boolean
   tipoConciliacion: TipoConciliacion
@@ -103,6 +99,7 @@ export interface MovimientoMercado {
   datosOriginales: Record<string, any>
 }
 
+// Tipos para estadísticas y resultados
 export interface EstadisticasConciliacion {
   totalSolicitudes: number
   totalRecibos: number
@@ -121,7 +118,7 @@ export interface ResultadoConciliacion {
   estadisticas: EstadisticasConciliacion
 }
 
-// Tipos para el resumen de Excel
+// Tipos para resumen de exportación
 export interface ResumenItem {
   cantidad: number
   importeTotal: number
