@@ -188,6 +188,14 @@ export default function ConciliacionTransferencias() {
     setShowDetalles(true)
   }
 
+  // Función para formatear números
+  const formatearNumero = (numero: number): string => {
+    return numero.toLocaleString("es-AR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  }
+
   // Función para filtrar solicitudes
   const solicitudesFiltradas =
     resultadoConciliacion?.solicitudesPago.filter((solicitud) => {
@@ -474,248 +482,269 @@ export default function ConciliacionTransferencias() {
 
       {/* Tablas de Conciliación */}
       {resultadoConciliacion && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Tabla de Solicitudes de Pago */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Solicitudes de Pago</CardTitle>
-              <div className="flex gap-2">
-                <Select value={filtroSolicitudes} onValueChange={setFiltroSolicitudes}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="conciliados">Conciliados</SelectItem>
-                    <SelectItem value="no-conciliados">No Conciliados</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center gap-2 flex-1">
-                  <Search className="w-4 h-4 text-gray-400" />
-                  <Input
-                    placeholder="Buscar..."
-                    value={busquedaSolicitudes}
-                    onChange={(e) => setBusquedaSolicitudes(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="max-h-96 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Comitente</TableHead>
-                      <TableHead className="text-xs">CUIT</TableHead>
-                      <TableHead className="text-xs">Moneda</TableHead>
-                      <TableHead className="text-xs">Recibos</TableHead>
-                      <TableHead className="text-xs">Mov. Banc.</TableHead>
-                      <TableHead className="text-xs">Ver</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {solicitudesFiltradas.map((solicitud) => (
-                      <TableRow
-                        key={solicitud.id}
-                        className={
-                          solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos ? "bg-green-50" : "bg-red-50"
-                        }
-                      >
-                        <TableCell className="text-xs">{solicitud.comitenteNumero}</TableCell>
-                        <TableCell className="text-xs font-mono">{solicitud.cuit}</TableCell>
-                        <TableCell className="text-xs">{solicitud.moneda}</TableCell>
-                        <TableCell>
-                          {solicitud.conciliadoRecibos ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-red-600" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {solicitud.conciliadoMovimientos ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-red-600" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(solicitud)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                {solicitudesFiltradas.length} de {resultadoConciliacion.solicitudesPago.length} solicitudes
-              </div>
-            </CardContent>
-          </Card>
+        <div className="space-y-6">
+          {/* Contenedor con scroll horizontal */}
+          <div className="overflow-x-auto">
+            <div className="flex gap-6 min-w-max">
+              {/* Tabla de Solicitudes de Pago */}
+              <Card className="min-w-96 flex-shrink-0">
+                <CardHeader>
+                  <CardTitle className="text-lg">Solicitudes de Pago</CardTitle>
+                  <div className="flex gap-2">
+                    <Select value={filtroSolicitudes} onValueChange={setFiltroSolicitudes}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="conciliados">Conciliados</SelectItem>
+                        <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-2 flex-1">
+                      <Search className="w-4 h-4 text-gray-400" />
+                      <Input
+                        placeholder="Buscar..."
+                        value={busquedaSolicitudes}
+                        onChange={(e) => setBusquedaSolicitudes(e.target.value)}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-96 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Fecha</TableHead>
+                          <TableHead className="text-xs">Comitente</TableHead>
+                          <TableHead className="text-xs">CUIT</TableHead>
+                          <TableHead className="text-xs">Moneda</TableHead>
+                          <TableHead className="text-xs">Importe</TableHead>
+                          <TableHead className="text-xs">Recibos</TableHead>
+                          <TableHead className="text-xs">Mov. Banc.</TableHead>
+                          <TableHead className="text-xs">Ver</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {solicitudesFiltradas.map((solicitud) => (
+                          <TableRow
+                            key={solicitud.id}
+                            className={
+                              solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos
+                                ? "bg-green-50"
+                                : "bg-red-50"
+                            }
+                          >
+                            <TableCell className="text-xs">{solicitud.fecha}</TableCell>
+                            <TableCell className="text-xs">{solicitud.comitenteNumero}</TableCell>
+                            <TableCell className="text-xs font-mono">{solicitud.cuit}</TableCell>
+                            <TableCell className="text-xs">{solicitud.moneda}</TableCell>
+                            <TableCell className="text-xs">{formatearNumero(solicitud.importe)}</TableCell>
+                            <TableCell>
+                              {solicitud.conciliadoRecibos ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {solicitud.conciliadoMovimientos ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(solicitud)}>
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    {solicitudesFiltradas.length} de {resultadoConciliacion.solicitudesPago.length} solicitudes
+                  </div>
+                </CardContent>
+              </Card>
 
-          {/* Tabla de Recibos de Pago */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Recibos de Pago</CardTitle>
-              <div className="flex gap-2">
-                <Select value={filtroRecibos} onValueChange={setFiltroRecibos}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="conciliados">Conciliados</SelectItem>
-                    <SelectItem value="no-conciliados">No Conciliados</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center gap-2 flex-1">
-                  <Search className="w-4 h-4 text-gray-400" />
-                  <Input
-                    placeholder="Buscar..."
-                    value={busquedaRecibos}
-                    onChange={(e) => setBusquedaRecibos(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="max-h-96 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Comitente</TableHead>
-                      <TableHead className="text-xs">CUIT</TableHead>
-                      <TableHead className="text-xs">Moneda</TableHead>
-                      <TableHead className="text-xs">Solicitudes</TableHead>
-                      <TableHead className="text-xs">Mov. Banc.</TableHead>
-                      <TableHead className="text-xs">Ver</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recibosFiltrados.map((recibo) => (
-                      <TableRow
-                        key={recibo.id}
-                        className={
-                          recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos ? "bg-green-50" : "bg-red-50"
-                        }
-                      >
-                        <TableCell className="text-xs">{recibo.comitenteNumero}</TableCell>
-                        <TableCell className="text-xs font-mono">{recibo.cuit}</TableCell>
-                        <TableCell className="text-xs">$</TableCell>
-                        <TableCell>
-                          {recibo.conciliadoSolicitudes ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-red-600" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {recibo.conciliadoMovimientos ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-red-600" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(recibo)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                {recibosFiltrados.length} de {resultadoConciliacion.recibosPago.length} recibos
-              </div>
-            </CardContent>
-          </Card>
+              {/* Tabla de Recibos de Pago */}
+              <Card className="min-w-96 flex-shrink-0">
+                <CardHeader>
+                  <CardTitle className="text-lg">Recibos de Pago</CardTitle>
+                  <div className="flex gap-2">
+                    <Select value={filtroRecibos} onValueChange={setFiltroRecibos}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="conciliados">Conciliados</SelectItem>
+                        <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-2 flex-1">
+                      <Search className="w-4 h-4 text-gray-400" />
+                      <Input
+                        placeholder="Buscar..."
+                        value={busquedaRecibos}
+                        onChange={(e) => setBusquedaRecibos(e.target.value)}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-96 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Fecha</TableHead>
+                          <TableHead className="text-xs">Comitente</TableHead>
+                          <TableHead className="text-xs">CUIT</TableHead>
+                          <TableHead className="text-xs">Moneda</TableHead>
+                          <TableHead className="text-xs">Importe</TableHead>
+                          <TableHead className="text-xs">Solicitudes</TableHead>
+                          <TableHead className="text-xs">Mov. Banc.</TableHead>
+                          <TableHead className="text-xs">Ver</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recibosFiltrados.map((recibo) => (
+                          <TableRow
+                            key={recibo.id}
+                            className={
+                              recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos ? "bg-green-50" : "bg-red-50"
+                            }
+                          >
+                            <TableCell className="text-xs">{recibo.fechaLiquidacion}</TableCell>
+                            <TableCell className="text-xs">{recibo.comitenteNumero}</TableCell>
+                            <TableCell className="text-xs font-mono">{recibo.cuit}</TableCell>
+                            <TableCell className="text-xs">$</TableCell>
+                            <TableCell className="text-xs">{formatearNumero(recibo.importe)}</TableCell>
+                            <TableCell>
+                              {recibo.conciliadoSolicitudes ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {recibo.conciliadoMovimientos ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(recibo)}>
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    {recibosFiltrados.length} de {resultadoConciliacion.recibosPago.length} recibos
+                  </div>
+                </CardContent>
+              </Card>
 
-          {/* Tabla de Movimientos Bancarios */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Movimientos Bancarios</CardTitle>
-              <div className="flex gap-2">
-                <Select value={filtroMovimientos} onValueChange={setFiltroMovimientos}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="conciliados">Conciliados</SelectItem>
-                    <SelectItem value="no-conciliados">No Conciliados</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center gap-2 flex-1">
-                  <Search className="w-4 h-4 text-gray-400" />
-                  <Input
-                    placeholder="Buscar..."
-                    value={busquedaMovimientos}
-                    onChange={(e) => setBusquedaMovimientos(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="max-h-96 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Beneficiario</TableHead>
-                      <TableHead className="text-xs">CUIT</TableHead>
-                      <TableHead className="text-xs">Moneda</TableHead>
-                      <TableHead className="text-xs">Solicitudes</TableHead>
-                      <TableHead className="text-xs">Recibos</TableHead>
-                      <TableHead className="text-xs">Ver</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {movimientosFiltrados.map((movimiento) => (
-                      <TableRow
-                        key={movimiento.id}
-                        className={
-                          movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos ? "bg-green-50" : "bg-red-50"
-                        }
-                      >
-                        <TableCell className="text-xs truncate max-w-24" title={movimiento.beneficiario}>
-                          {movimiento.beneficiario}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">{movimiento.cuit}</TableCell>
-                        <TableCell className="text-xs">{movimiento.moneda}</TableCell>
-                        <TableCell>
-                          {movimiento.conciliadoSolicitudes ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-red-600" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {movimiento.conciliadoRecibos ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-red-600" />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(movimiento)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                {movimientosFiltrados.length} de {resultadoConciliacion.movimientosBancarios.length} movimientos
-              </div>
-            </CardContent>
-          </Card>
+              {/* Tabla de Movimientos Bancarios */}
+              <Card className="min-w-96 flex-shrink-0">
+                <CardHeader>
+                  <CardTitle className="text-lg">Movimientos Bancarios</CardTitle>
+                  <div className="flex gap-2">
+                    <Select value={filtroMovimientos} onValueChange={setFiltroMovimientos}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="conciliados">Conciliados</SelectItem>
+                        <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-2 flex-1">
+                      <Search className="w-4 h-4 text-gray-400" />
+                      <Input
+                        placeholder="Buscar..."
+                        value={busquedaMovimientos}
+                        onChange={(e) => setBusquedaMovimientos(e.target.value)}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-96 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Fecha</TableHead>
+                          <TableHead className="text-xs">Beneficiario</TableHead>
+                          <TableHead className="text-xs">CUIT</TableHead>
+                          <TableHead className="text-xs">Moneda</TableHead>
+                          <TableHead className="text-xs">Importe</TableHead>
+                          <TableHead className="text-xs">Solicitudes</TableHead>
+                          <TableHead className="text-xs">Recibos</TableHead>
+                          <TableHead className="text-xs">Ver</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {movimientosFiltrados.map((movimiento) => (
+                          <TableRow
+                            key={movimiento.id}
+                            className={
+                              movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos
+                                ? "bg-green-50"
+                                : "bg-red-50"
+                            }
+                          >
+                            <TableCell className="text-xs">{movimiento.fecha}</TableCell>
+                            <TableCell className="text-xs truncate max-w-32" title={movimiento.beneficiario}>
+                              {movimiento.beneficiario}
+                            </TableCell>
+                            <TableCell className="text-xs font-mono">{movimiento.cuit}</TableCell>
+                            <TableCell className="text-xs">{movimiento.moneda}</TableCell>
+                            <TableCell className="text-xs">{formatearNumero(movimiento.importe)}</TableCell>
+                            <TableCell>
+                              {movimiento.conciliadoSolicitudes ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {movimiento.conciliadoRecibos ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-600" />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(movimiento)}>
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    {movimientosFiltrados.length} de {resultadoConciliacion.movimientosBancarios.length} movimientos
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       )}
 
@@ -729,7 +758,7 @@ export default function ConciliacionTransferencias() {
               <p className="text-sm text-gray-500">CUIT: 30711610126</p>
             </CardHeader>
             <CardContent>
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -751,9 +780,7 @@ export default function ConciliacionTransferencias() {
                         <TableCell className="text-xs">
                           <Badge variant={transferencia.dc === "C" ? "default" : "secondary"}>{transferencia.dc}</Badge>
                         </TableCell>
-                        <TableCell className="text-xs">
-                          {transferencia.importe.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                        </TableCell>
+                        <TableCell className="text-xs">{formatearNumero(transferencia.importe)}</TableCell>
                         <TableCell className="text-xs">{transferencia.moneda}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(transferencia)}>
@@ -778,7 +805,7 @@ export default function ConciliacionTransferencias() {
               <p className="text-sm text-gray-500">BYMA S.A. BOLSAS Y MERCADOS AR - 30711610126</p>
             </CardHeader>
             <CardContent>
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -800,9 +827,7 @@ export default function ConciliacionTransferencias() {
                         <TableCell className="text-xs">
                           <Badge variant={mercado.dc === "C" ? "default" : "secondary"}>{mercado.dc}</Badge>
                         </TableCell>
-                        <TableCell className="text-xs">
-                          {mercado.importe.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                        </TableCell>
+                        <TableCell className="text-xs">{formatearNumero(mercado.importe)}</TableCell>
                         <TableCell className="text-xs">{mercado.moneda}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(mercado)}>
