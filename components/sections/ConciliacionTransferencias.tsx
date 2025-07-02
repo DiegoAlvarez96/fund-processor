@@ -1,0 +1,930 @@
+"use client"
+
+import type React from "react"
+
+import { useState, useRef } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Upload,
+  FileSpreadsheet,
+  Search,
+  Eye,
+  CheckCircle,
+  XCircle,
+  BarChart3,
+  AlertCircle,
+  Trash2,
+  RefreshCw,
+} from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import type { ResultadoConciliacion } from "@/lib/conciliacion-types"
+import {
+  parseStatusOrdenesPago,
+  parseConfirmacionSolicitudes,
+  parseRecibosPago,
+  parseMovimientosBancarios,
+  crearSolicitudesPago,
+  realizarConciliacion,
+} from "@/lib/conciliacion-parser"
+
+export default function ConciliacionTransferencias() {
+  const { toast } = useToast()
+
+  // Estados para archivos
+  const [archivoStatus, setArchivoStatus] = useState<File | null>(null)
+  const [archivoConfirmacion, setArchivoConfirmacion] = useState<File | null>(null)
+  const [archivoRecibos, setArchivoRecibos] = useState<File | null>(null)
+  const [archivoMovimientosPesos, setArchivoMovimientosPesos] = useState<File | null>(null)
+  const [archivoMovimientosUSD, setArchivoMovimientosUSD] = useState<File | null>(null)
+
+  // Estados para datos procesados
+  const [resultadoConciliacion, setResultadoConciliacion] = useState<ResultadoConciliacion | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  // Estados para filtros y búsqueda
+  const [filtroSolicitudes, setFiltroSolicitudes] = useState<"todos" | "conciliados" | "no-conciliados">("todos")
+  const [filtroRecibos, setFiltroRecibos] = useState<"todos" | "conciliados" | "no-conciliados">("todos")
+  const [filtroMovimientos, setFiltroMovimientos] = useState<"todos" | "conciliados" | "no-conciliados">("todos")
+  const [busquedaSolicitudes, setBusquedaSolicitudes] = useState("")
+  const [busquedaRecibos, setBusquedaRecibos] = useState("")
+  const [busquedaMovimientos, setBusquedaMovimientos] = useState("")
+
+  // Estados para modal de detalles
+  const [showDetalles, setShowDetalles] = useState(false)
+  const [detallesSeleccionados, setDetallesSeleccionados] = useState<any>(null)
+
+  // Referencias para inputs de archivos
+  const statusInputRef = useRef<HTMLInputElement>(null)
+  const confirmacionInputRef = useRef<HTMLInputElement>(null)
+  const recibosInputRef = useRef<HTMLInputElement>(null)
+  const movimientosPesosInputRef = useRef<HTMLInputElement>(null)
+  const movimientosUSDInputRef = useRef<HTMLInputElement>(null)
+
+  // Función para manejar selección de archivos
+  const handleFileSelect = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    setter: React.Dispatch<React.SetStateAction<File | null>>,
+    tipo: string,
+  ) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validar extensión
+    const validExtensions = [".xlsx", ".xls", ".csv"]
+    const fileName = file.name.toLowerCase()
+    const hasValidExtension = validExtensions.some((ext) => fileName.endsWith(ext))
+
+    if (!hasValidExtension) {
+      toast({
+        title: "Archivo no válido",
+        description: "Use archivos .xlsx, .xls o .csv",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setter(file)
+    toast({
+      title: `Archivo ${tipo} cargado`,
+      description: `${file.name} - ${(file.size / 1024).toFixed(1)} KB`,
+    })
+  }
+
+  // Función principal para procesar todos los archivos
+  const procesarArchivos = async () => {
+    if (!archivoStatus || !archivoConfirmacion || !archivoRecibos || !archivoMovimientosPesos) {
+      toast({
+        title: "Archivos faltantes",
+        description: "Debe cargar al menos Status, Confirmación, Recibos y Movimientos Pesos",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsProcessing(true)
+
+    try {
+      console.log("🔄 Iniciando procesamiento de archivos...")
+
+      // Procesar archivos en paralelo
+      const [statusData, confirmacionData, recibosData, movimientosPesosData, movimientosUSDData] = await Promise.all([
+        parseStatusOrdenesPago(archivoStatus),
+        parseConfirmacionSolicitudes(archivoConfirmacion),
+        parseRecibosPago(archivoRecibos),
+        parseMovimientosBancarios(archivoMovimientosPesos),
+        archivoMovimientosUSD
+          ? parseMovimientosBancarios(archivoMovimientosUSD)
+          : Promise.resolve({ movimientos: [], transferencias: [], mercados: [] }),
+      ])
+
+      // Unir solicitudes de pago
+      const solicitudesPago = crearSolicitudesPago(statusData, confirmacionData)
+
+      // Combinar movimientos de pesos y USD
+      const todosMovimientos = [...movimientosPesosData.movimientos, ...movimientosUSDData.movimientos]
+
+      const todasTransferencias = [...movimientosPesosData.transferencias, ...movimientosUSDData.transferencias]
+
+      const todosMercados = [...movimientosPesosData.mercados, ...movimientosUSDData.mercados]
+
+      // Realizar conciliación
+      const resultado = realizarConciliacion(solicitudesPago, recibosData, todosMovimientos)
+
+      // Agregar transferencias y mercados al resultado
+      resultado.transferenciasMonetarias = todasTransferencias
+      resultado.movimientosMercados = todosMercados
+
+      setResultadoConciliacion(resultado)
+
+      toast({
+        title: "Procesamiento completado",
+        description: `Conciliados: ${resultado.estadisticas.conciliadosCompletos}, No conciliados: ${resultado.estadisticas.noConciliados}`,
+      })
+    } catch (error) {
+      console.error("❌ Error procesando archivos:", error)
+      toast({
+        title: "Error al procesar",
+        description: "Ocurrió un error al procesar los archivos. Verifique el formato.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  // Función para limpiar todo
+  const limpiarTodo = () => {
+    setArchivoStatus(null)
+    setArchivoConfirmacion(null)
+    setArchivoRecibos(null)
+    setArchivoMovimientosPesos(null)
+    setArchivoMovimientosUSD(null)
+    setResultadoConciliacion(null)
+
+    // Limpiar inputs
+    if (statusInputRef.current) statusInputRef.current.value = ""
+    if (confirmacionInputRef.current) confirmacionInputRef.current.value = ""
+    if (recibosInputRef.current) recibosInputRef.current.value = ""
+    if (movimientosPesosInputRef.current) movimientosPesosInputRef.current.value = ""
+    if (movimientosUSDInputRef.current) movimientosUSDInputRef.current.value = ""
+
+    toast({
+      title: "Datos limpiados",
+      description: "Se eliminaron todos los archivos y datos procesados",
+    })
+  }
+
+  // Función para mostrar detalles
+  const mostrarDetalles = (item: any) => {
+    setDetallesSeleccionados(item)
+    setShowDetalles(true)
+  }
+
+  // Función para filtrar solicitudes
+  const solicitudesFiltradas =
+    resultadoConciliacion?.solicitudesPago.filter((solicitud) => {
+      // Filtro por estado de conciliación
+      if (filtroSolicitudes === "conciliados" && (!solicitud.conciliadoRecibos || !solicitud.conciliadoMovimientos)) {
+        return false
+      }
+      if (filtroSolicitudes === "no-conciliados" && solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos) {
+        return false
+      }
+
+      // Filtro por búsqueda
+      if (busquedaSolicitudes.trim()) {
+        const termino = busquedaSolicitudes.toLowerCase()
+        return (
+          solicitud.comitenteNumero.toLowerCase().includes(termino) ||
+          solicitud.comitenteDescripcion.toLowerCase().includes(termino) ||
+          solicitud.cuit.includes(termino)
+        )
+      }
+
+      return true
+    }) || []
+
+  // Función para filtrar recibos
+  const recibosFiltrados =
+    resultadoConciliacion?.recibosPago.filter((recibo) => {
+      // Filtro por estado de conciliación
+      if (filtroRecibos === "conciliados" && (!recibo.conciliadoSolicitudes || !recibo.conciliadoMovimientos)) {
+        return false
+      }
+      if (filtroRecibos === "no-conciliados" && recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos) {
+        return false
+      }
+
+      // Filtro por búsqueda
+      if (busquedaRecibos.trim()) {
+        const termino = busquedaRecibos.toLowerCase()
+        return (
+          recibo.comitenteNumero.toLowerCase().includes(termino) ||
+          recibo.comitenteDenominacion.toLowerCase().includes(termino) ||
+          recibo.cuit.includes(termino)
+        )
+      }
+
+      return true
+    }) || []
+
+  // Función para filtrar movimientos
+  const movimientosFiltrados =
+    resultadoConciliacion?.movimientosBancarios.filter((movimiento) => {
+      // Filtro por estado de conciliación
+      if (filtroMovimientos === "conciliados" && (!movimiento.conciliadoSolicitudes || !movimiento.conciliadoRecibos)) {
+        return false
+      }
+      if (filtroMovimientos === "no-conciliados" && movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos) {
+        return false
+      }
+
+      // Filtro por búsqueda
+      if (busquedaMovimientos.trim()) {
+        const termino = busquedaMovimientos.toLowerCase()
+        return movimiento.beneficiario.toLowerCase().includes(termino) || movimiento.cuit.includes(termino)
+      }
+
+      return true
+    }) || []
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+          <BarChart3 className="w-8 h-8" />
+          Conciliación de Transferencias
+        </h1>
+        <p className="text-gray-600">Sistema de conciliación entre solicitudes, recibos y movimientos bancarios</p>
+      </div>
+
+      {/* Carga de Archivos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="w-5 h-5" />
+            Carga de Archivos Excel
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Status Órdenes de Pago */}
+            <div className="space-y-2">
+              <Label>Status Órdenes de Pago *</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => statusInputRef.current?.click()} className="flex-1">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  {archivoStatus ? "Cambiar" : "Seleccionar"}
+                </Button>
+                {archivoStatus && (
+                  <Badge variant="outline" className="text-xs">
+                    {archivoStatus.name}
+                  </Badge>
+                )}
+              </div>
+              <input
+                ref={statusInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => handleFileSelect(e, setArchivoStatus, "Status")}
+                className="hidden"
+              />
+            </div>
+
+            {/* Confirmación de Solicitudes */}
+            <div className="space-y-2">
+              <Label>Confirmación de Solicitudes *</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => confirmacionInputRef.current?.click()} className="flex-1">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  {archivoConfirmacion ? "Cambiar" : "Seleccionar"}
+                </Button>
+                {archivoConfirmacion && (
+                  <Badge variant="outline" className="text-xs">
+                    {archivoConfirmacion.name}
+                  </Badge>
+                )}
+              </div>
+              <input
+                ref={confirmacionInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => handleFileSelect(e, setArchivoConfirmacion, "Confirmación")}
+                className="hidden"
+              />
+            </div>
+
+            {/* Recibos de Pago */}
+            <div className="space-y-2">
+              <Label>Recibos de Pago *</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => recibosInputRef.current?.click()} className="flex-1">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  {archivoRecibos ? "Cambiar" : "Seleccionar"}
+                </Button>
+                {archivoRecibos && (
+                  <Badge variant="outline" className="text-xs">
+                    {archivoRecibos.name}
+                  </Badge>
+                )}
+              </div>
+              <input
+                ref={recibosInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => handleFileSelect(e, setArchivoRecibos, "Recibos")}
+                className="hidden"
+              />
+            </div>
+
+            {/* Movimientos Bancarios Pesos */}
+            <div className="space-y-2">
+              <Label>Movimientos Bancarios Pesos *</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => movimientosPesosInputRef.current?.click()} className="flex-1">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  {archivoMovimientosPesos ? "Cambiar" : "Seleccionar"}
+                </Button>
+                {archivoMovimientosPesos && (
+                  <Badge variant="outline" className="text-xs">
+                    {archivoMovimientosPesos.name}
+                  </Badge>
+                )}
+              </div>
+              <input
+                ref={movimientosPesosInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => handleFileSelect(e, setArchivoMovimientosPesos, "Movimientos Pesos")}
+                className="hidden"
+              />
+            </div>
+
+            {/* Movimientos Bancarios USD */}
+            <div className="space-y-2">
+              <Label>Movimientos Bancarios USD</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => movimientosUSDInputRef.current?.click()} className="flex-1">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  {archivoMovimientosUSD ? "Cambiar" : "Seleccionar"}
+                </Button>
+                {archivoMovimientosUSD && (
+                  <Badge variant="outline" className="text-xs">
+                    {archivoMovimientosUSD.name}
+                  </Badge>
+                )}
+              </div>
+              <input
+                ref={movimientosUSDInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => handleFileSelect(e, setArchivoMovimientosUSD, "Movimientos USD")}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Archivos requeridos:</strong> Los primeros 4 archivos son obligatorios. El archivo de Movimientos
+              USD es opcional pero recomendado para conciliación completa.
+            </AlertDescription>
+          </Alert>
+
+          <div className="flex gap-3">
+            <Button
+              onClick={procesarArchivos}
+              disabled={
+                isProcessing || !archivoStatus || !archivoConfirmacion || !archivoRecibos || !archivoMovimientosPesos
+              }
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isProcessing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Procesar y Conciliar
+                </>
+              )}
+            </Button>
+
+            <Button variant="destructive" onClick={limpiarTodo}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Limpiar Todo
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Estadísticas de Conciliación */}
+      {resultadoConciliacion && (
+        <Card>
+          <CardHeader>
+            <CardTitle>📊 Estadísticas de Conciliación</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {resultadoConciliacion.estadisticas.totalSolicitudes}
+                </div>
+                <div className="text-sm text-gray-500">Solicitudes</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {resultadoConciliacion.estadisticas.totalRecibos}
+                </div>
+                <div className="text-sm text-gray-500">Recibos</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">
+                  {resultadoConciliacion.estadisticas.totalMovimientos}
+                </div>
+                <div className="text-sm text-gray-500">Movimientos</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-700">
+                  {resultadoConciliacion.estadisticas.conciliadosCompletos}
+                </div>
+                <div className="text-sm text-gray-500">Conciliados</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {resultadoConciliacion.estadisticas.noConciliados}
+                </div>
+                <div className="text-sm text-gray-500">No Conciliados</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tablas de Conciliación */}
+      {resultadoConciliacion && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* Tabla de Solicitudes de Pago */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Solicitudes de Pago</CardTitle>
+              <div className="flex gap-2">
+                <Select value={filtroSolicitudes} onValueChange={setFiltroSolicitudes}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="conciliados">Conciliados</SelectItem>
+                    <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 flex-1">
+                  <Search className="w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar..."
+                    value={busquedaSolicitudes}
+                    onChange={(e) => setBusquedaSolicitudes(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-96 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Comitente</TableHead>
+                      <TableHead className="text-xs">CUIT</TableHead>
+                      <TableHead className="text-xs">Moneda</TableHead>
+                      <TableHead className="text-xs">Recibos</TableHead>
+                      <TableHead className="text-xs">Mov. Banc.</TableHead>
+                      <TableHead className="text-xs">Ver</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {solicitudesFiltradas.map((solicitud) => (
+                      <TableRow
+                        key={solicitud.id}
+                        className={
+                          solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos ? "bg-green-50" : "bg-red-50"
+                        }
+                      >
+                        <TableCell className="text-xs">{solicitud.comitenteNumero}</TableCell>
+                        <TableCell className="text-xs font-mono">{solicitud.cuit}</TableCell>
+                        <TableCell className="text-xs">{solicitud.moneda}</TableCell>
+                        <TableCell>
+                          {solicitud.conciliadoRecibos ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-600" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {solicitud.conciliadoMovimientos ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-600" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(solicitud)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {solicitudesFiltradas.length} de {resultadoConciliacion.solicitudesPago.length} solicitudes
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de Recibos de Pago */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Recibos de Pago</CardTitle>
+              <div className="flex gap-2">
+                <Select value={filtroRecibos} onValueChange={setFiltroRecibos}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="conciliados">Conciliados</SelectItem>
+                    <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 flex-1">
+                  <Search className="w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar..."
+                    value={busquedaRecibos}
+                    onChange={(e) => setBusquedaRecibos(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-96 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Comitente</TableHead>
+                      <TableHead className="text-xs">CUIT</TableHead>
+                      <TableHead className="text-xs">Moneda</TableHead>
+                      <TableHead className="text-xs">Solicitudes</TableHead>
+                      <TableHead className="text-xs">Mov. Banc.</TableHead>
+                      <TableHead className="text-xs">Ver</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recibosFiltrados.map((recibo) => (
+                      <TableRow
+                        key={recibo.id}
+                        className={
+                          recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos ? "bg-green-50" : "bg-red-50"
+                        }
+                      >
+                        <TableCell className="text-xs">{recibo.comitenteNumero}</TableCell>
+                        <TableCell className="text-xs font-mono">{recibo.cuit}</TableCell>
+                        <TableCell className="text-xs">$</TableCell>
+                        <TableCell>
+                          {recibo.conciliadoSolicitudes ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-600" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {recibo.conciliadoMovimientos ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-600" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(recibo)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {recibosFiltrados.length} de {resultadoConciliacion.recibosPago.length} recibos
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de Movimientos Bancarios */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Movimientos Bancarios</CardTitle>
+              <div className="flex gap-2">
+                <Select value={filtroMovimientos} onValueChange={setFiltroMovimientos}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="conciliados">Conciliados</SelectItem>
+                    <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 flex-1">
+                  <Search className="w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar..."
+                    value={busquedaMovimientos}
+                    onChange={(e) => setBusquedaMovimientos(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-96 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Beneficiario</TableHead>
+                      <TableHead className="text-xs">CUIT</TableHead>
+                      <TableHead className="text-xs">Moneda</TableHead>
+                      <TableHead className="text-xs">Solicitudes</TableHead>
+                      <TableHead className="text-xs">Recibos</TableHead>
+                      <TableHead className="text-xs">Ver</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {movimientosFiltrados.map((movimiento) => (
+                      <TableRow
+                        key={movimiento.id}
+                        className={
+                          movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos ? "bg-green-50" : "bg-red-50"
+                        }
+                      >
+                        <TableCell className="text-xs truncate max-w-24" title={movimiento.beneficiario}>
+                          {movimiento.beneficiario}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">{movimiento.cuit}</TableCell>
+                        <TableCell className="text-xs">{movimiento.moneda}</TableCell>
+                        <TableCell>
+                          {movimiento.conciliadoSolicitudes ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-600" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {movimiento.conciliadoRecibos ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-600" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(movimiento)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {movimientosFiltrados.length} de {resultadoConciliacion.movimientosBancarios.length} movimientos
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Tablas Adicionales */}
+      {resultadoConciliacion && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Transferencias Monetarias */}
+          <Card>
+            <CardHeader>
+              <CardTitle>💰 Transferencias Monetarias y Mercados</CardTitle>
+              <p className="text-sm text-gray-500">CUIT: 30711610126</p>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-64 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Fecha</TableHead>
+                      <TableHead className="text-xs">Beneficiario</TableHead>
+                      <TableHead className="text-xs">D/C</TableHead>
+                      <TableHead className="text-xs">Importe</TableHead>
+                      <TableHead className="text-xs">Moneda</TableHead>
+                      <TableHead className="text-xs">Ver</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resultadoConciliacion.transferenciasMonetarias.map((transferencia) => (
+                      <TableRow key={transferencia.id}>
+                        <TableCell className="text-xs">{transferencia.fecha}</TableCell>
+                        <TableCell className="text-xs truncate max-w-32" title={transferencia.beneficiario}>
+                          {transferencia.beneficiario}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant={transferencia.dc === "C" ? "default" : "secondary"}>{transferencia.dc}</Badge>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {transferencia.importe.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-xs">{transferencia.moneda}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(transferencia)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {resultadoConciliacion.transferenciasMonetarias.length} transferencias
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Movimientos de Mercados */}
+          <Card>
+            <CardHeader>
+              <CardTitle>📈 Mercados (BYMA)</CardTitle>
+              <p className="text-sm text-gray-500">BYMA S.A. BOLSAS Y MERCADOS AR - 30711610126</p>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-64 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Fecha</TableHead>
+                      <TableHead className="text-xs">Beneficiario</TableHead>
+                      <TableHead className="text-xs">D/C</TableHead>
+                      <TableHead className="text-xs">Importe</TableHead>
+                      <TableHead className="text-xs">Moneda</TableHead>
+                      <TableHead className="text-xs">Ver</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resultadoConciliacion.movimientosMercados.map((mercado) => (
+                      <TableRow key={mercado.id}>
+                        <TableCell className="text-xs">{mercado.fecha}</TableCell>
+                        <TableCell className="text-xs truncate max-w-32" title={mercado.beneficiario}>
+                          {mercado.beneficiario}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant={mercado.dc === "C" ? "default" : "secondary"}>{mercado.dc}</Badge>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {mercado.importe.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-xs">{mercado.moneda}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(mercado)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {resultadoConciliacion.movimientosMercados.length} movimientos de mercados
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal de Detalles */}
+      <Dialog open={showDetalles} onOpenChange={setShowDetalles}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalles del Registro</DialogTitle>
+          </DialogHeader>
+          {detallesSeleccionados && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Tipo de Registro</Label>
+                  <p className="text-sm text-gray-600">
+                    {detallesSeleccionados.origen
+                      ? `Solicitud (${detallesSeleccionados.origen})`
+                      : detallesSeleccionados.fechaLiquidacion
+                        ? "Recibo de Pago"
+                        : detallesSeleccionados.beneficiario
+                          ? "Movimiento Bancario"
+                          : "Registro"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">ID</Label>
+                  <p className="text-sm text-gray-600 font-mono">{detallesSeleccionados.id}</p>
+                </div>
+              </div>
+
+              {/* Datos principales */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-medium mb-3">Datos Principales</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {Object.entries(detallesSeleccionados)
+                    .filter(([key]) => !key.includes("conciliado") && key !== "datosOriginales" && key !== "id")
+                    .map(([key, value]) => (
+                      <div key={key}>
+                        <span className="font-medium text-gray-600">{key}:</span>
+                        <span className="ml-2">{String(value)}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Estados de conciliación */}
+              {(detallesSeleccionados.conciliadoRecibos !== undefined ||
+                detallesSeleccionados.conciliadoMovimientos !== undefined ||
+                detallesSeleccionados.conciliadoSolicitudes !== undefined) && (
+                <div className="border rounded-lg p-4 bg-blue-50">
+                  <h4 className="font-medium mb-3">Estado de Conciliación</h4>
+                  <div className="space-y-2">
+                    {detallesSeleccionados.conciliadoRecibos !== undefined && (
+                      <div className="flex items-center gap-2">
+                        {detallesSeleccionados.conciliadoRecibos ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        )}
+                        <span className="text-sm">Conciliado con Recibos</span>
+                      </div>
+                    )}
+                    {detallesSeleccionados.conciliadoMovimientos !== undefined && (
+                      <div className="flex items-center gap-2">
+                        {detallesSeleccionados.conciliadoMovimientos ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        )}
+                        <span className="text-sm">Conciliado con Movimientos</span>
+                      </div>
+                    )}
+                    {detallesSeleccionados.conciliadoSolicitudes !== undefined && (
+                      <div className="flex items-center gap-2">
+                        {detallesSeleccionados.conciliadoSolicitudes ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        )}
+                        <span className="text-sm">Conciliado con Solicitudes</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Datos originales del Excel */}
+              {detallesSeleccionados.datosOriginales && (
+                <div className="border rounded-lg p-4 bg-yellow-50">
+                  <h4 className="font-medium mb-3">Datos Originales del Excel</h4>
+                  <div className="max-h-40 overflow-y-auto">
+                    <div className="grid grid-cols-1 gap-2 text-sm">
+                      {Object.entries(detallesSeleccionados.datosOriginales).map(([key, value]) => (
+                        <div key={key} className="flex">
+                          <span className="font-medium text-gray-600 min-w-32">{key}:</span>
+                          <span className="ml-2 break-all">{String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
