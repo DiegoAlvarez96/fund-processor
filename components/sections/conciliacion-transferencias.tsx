@@ -25,9 +25,10 @@ import {
   Trash2,
   RefreshCw,
   Download,
+  AlertTriangle,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import type { ResultadoConciliacion } from "@/lib/conciliacion-types"
+import type { ResultadoConciliacion, TipoConciliacion } from "@/lib/conciliacion-types"
 import {
   parseStatusOrdenesPago,
   parseConfirmacionSolicitudes,
@@ -60,9 +61,13 @@ export default function ConciliacionTransferencias() {
   const [progressTotal, setProgressTotal] = useState(0)
 
   // Estados para filtros y búsqueda
-  const [filtroSolicitudes, setFiltroSolicitudes] = useState<"todos" | "conciliados" | "no-conciliados">("todos")
-  const [filtroRecibos, setFiltroRecibos] = useState<"todos" | "conciliados" | "no-conciliados">("todos")
-  const [filtroMovimientos, setFiltroMovimientos] = useState<"todos" | "conciliados" | "no-conciliados">("todos")
+  const [filtroSolicitudes, setFiltroSolicitudes] = useState<"todos" | "completos" | "por-importe" | "no-conciliados">(
+    "todos",
+  )
+  const [filtroRecibos, setFiltroRecibos] = useState<"todos" | "completos" | "por-importe" | "no-conciliados">("todos")
+  const [filtroMovimientos, setFiltroMovimientos] = useState<"todos" | "completos" | "por-importe" | "no-conciliados">(
+    "todos",
+  )
   const [busquedaSolicitudes, setBusquedaSolicitudes] = useState("")
   const [busquedaRecibos, setBusquedaRecibos] = useState("")
   const [busquedaMovimientos, setBusquedaMovimientos] = useState("")
@@ -77,6 +82,34 @@ export default function ConciliacionTransferencias() {
   const recibosInputRef = useRef<HTMLInputElement>(null)
   const movimientosPesosInputRef = useRef<HTMLInputElement>(null)
   const movimientosUSDInputRef = useRef<HTMLInputElement>(null)
+
+  // Función para obtener color según tipo de conciliación
+  const getColorPorTipo = (tipo: TipoConciliacion): string => {
+    switch (tipo) {
+      case "completa":
+        return "bg-green-50"
+      case "por-importe":
+        return "bg-yellow-50"
+      case "no-conciliado":
+        return "bg-red-50"
+      default:
+        return "bg-gray-50"
+    }
+  }
+
+  // Función para obtener icono según tipo de conciliación
+  const getIconoPorTipo = (tipo: TipoConciliacion) => {
+    switch (tipo) {
+      case "completa":
+        return <CheckCircle className="w-4 h-4 text-green-600" />
+      case "por-importe":
+        return <AlertTriangle className="w-4 h-4 text-yellow-600" />
+      case "no-conciliado":
+        return <XCircle className="w-4 h-4 text-red-600" />
+      default:
+        return <XCircle className="w-4 h-4 text-gray-600" />
+    }
+  }
 
   // Función para manejar selección de archivos
   const handleFileSelect = (
@@ -199,8 +232,8 @@ export default function ConciliacionTransferencias() {
 
       const todosMercados = [...movimientosPesosData.mercados, ...movimientosUSDData.mercados]
 
-      setProgressMessage("Realizando conciliación...")
-      // Realizar conciliación
+      setProgressMessage("Realizando conciliación completa y por importe...")
+      // Realizar conciliación (ahora incluye ambos tipos)
       const resultado = realizarConciliacion(solicitudesPago, recibosData, todosMovimientos)
 
       // Agregar transferencias y mercados al resultado
@@ -211,7 +244,7 @@ export default function ConciliacionTransferencias() {
 
       toast({
         title: "Procesamiento completado",
-        description: `Conciliados: ${resultado.estadisticas.conciliadosCompletos}, No conciliados: ${resultado.estadisticas.noConciliados}`,
+        description: `Completos: ${resultado.estadisticas.conciliadosCompletos}, Por importe: ${resultado.estadisticas.conciliadosPorImporte}, No conciliados: ${resultado.estadisticas.noConciliados}`,
       })
     } catch (error) {
       console.error("❌ Error procesando archivos:", error)
@@ -266,10 +299,13 @@ export default function ConciliacionTransferencias() {
   const solicitudesFiltradas =
     resultadoConciliacion?.solicitudesPago.filter((solicitud) => {
       // Filtro por estado de conciliación
-      if (filtroSolicitudes === "conciliados" && (!solicitud.conciliadoRecibos || !solicitud.conciliadoMovimientos)) {
+      if (filtroSolicitudes === "completos" && solicitud.tipoConciliacion !== "completa") {
         return false
       }
-      if (filtroSolicitudes === "no-conciliados" && solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos) {
+      if (filtroSolicitudes === "por-importe" && solicitud.tipoConciliacion !== "por-importe") {
+        return false
+      }
+      if (filtroSolicitudes === "no-conciliados" && solicitud.tipoConciliacion !== "no-conciliado") {
         return false
       }
 
@@ -290,10 +326,13 @@ export default function ConciliacionTransferencias() {
   const recibosFiltrados =
     resultadoConciliacion?.recibosPago.filter((recibo) => {
       // Filtro por estado de conciliación
-      if (filtroRecibos === "conciliados" && (!recibo.conciliadoSolicitudes || !recibo.conciliadoMovimientos)) {
+      if (filtroRecibos === "completos" && recibo.tipoConciliacion !== "completa") {
         return false
       }
-      if (filtroRecibos === "no-conciliados" && recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos) {
+      if (filtroRecibos === "por-importe" && recibo.tipoConciliacion !== "por-importe") {
+        return false
+      }
+      if (filtroRecibos === "no-conciliados" && recibo.tipoConciliacion !== "no-conciliado") {
         return false
       }
 
@@ -314,10 +353,13 @@ export default function ConciliacionTransferencias() {
   const movimientosFiltrados =
     resultadoConciliacion?.movimientosBancarios.filter((movimiento) => {
       // Filtro por estado de conciliación
-      if (filtroMovimientos === "conciliados" && (!movimiento.conciliadoSolicitudes || !movimiento.conciliadoRecibos)) {
+      if (filtroMovimientos === "completos" && movimiento.tipoConciliacion !== "completa") {
         return false
       }
-      if (filtroMovimientos === "no-conciliados" && movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos) {
+      if (filtroMovimientos === "por-importe" && movimiento.tipoConciliacion !== "por-importe") {
+        return false
+      }
+      if (filtroMovimientos === "no-conciliados" && movimiento.tipoConciliacion !== "no-conciliado") {
         return false
       }
 
@@ -478,9 +520,12 @@ export default function ConciliacionTransferencias() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Detección automática:</strong> El sistema detectará automáticamente las columnas por nombre. Sin
-              headers se asumirá orden estándar. Los campos vacíos se manejarán correctamente. El CUIT puede estar en
-              formato numérico o científico (se convertirá automáticamente).
+              <strong>Conciliación automática:</strong> El sistema realizará primero una conciliación completa (fecha +
+              CUIT + moneda + importe) y luego una conciliación automática por importe para los registros no
+              conciliados.
+              <br />
+              <strong>Semáforo:</strong> 🟢 Verde = Conciliado completo, 🟡 Amarillo = Conciliado por importe, 🔴 Rojo =
+              No conciliado
             </AlertDescription>
           </Alert>
 
@@ -527,7 +572,7 @@ export default function ConciliacionTransferencias() {
             <CardTitle>📊 Estadísticas de Conciliación</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
                   {resultadoConciliacion.estadisticas.totalSolicitudes}
@@ -550,13 +595,19 @@ export default function ConciliacionTransferencias() {
                 <div className="text-2xl font-bold text-green-700">
                   {resultadoConciliacion.estadisticas.conciliadosCompletos}
                 </div>
-                <div className="text-sm text-gray-500">Conciliados</div>
+                <div className="text-sm text-gray-500">🟢 Completos</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-600">
+                  {resultadoConciliacion.estadisticas.conciliadosPorImporte}
+                </div>
+                <div className="text-sm text-gray-500">🟡 Por Importe</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-red-600">
                   {resultadoConciliacion.estadisticas.noConciliados}
                 </div>
-                <div className="text-sm text-gray-500">No Conciliados</div>
+                <div className="text-sm text-gray-500">🔴 No Conciliados</div>
               </div>
             </div>
           </CardContent>
@@ -580,8 +631,9 @@ export default function ConciliacionTransferencias() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="todos">Todos</SelectItem>
-                        <SelectItem value="conciliados">Conciliados</SelectItem>
-                        <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                        <SelectItem value="completos">🟢 Completos</SelectItem>
+                        <SelectItem value="por-importe">🟡 Por Importe</SelectItem>
+                        <SelectItem value="no-conciliados">🔴 No Conciliados</SelectItem>
                       </SelectContent>
                     </Select>
                     <div className="flex items-center gap-2 flex-1">
@@ -605,40 +657,19 @@ export default function ConciliacionTransferencias() {
                           <TableHead className="text-xs">CUIT</TableHead>
                           <TableHead className="text-xs">Moneda</TableHead>
                           <TableHead className="text-xs">Importe</TableHead>
-                          <TableHead className="text-xs">Recibos</TableHead>
-                          <TableHead className="text-xs">Mov. Banc.</TableHead>
+                          <TableHead className="text-xs">Estado</TableHead>
                           <TableHead className="text-xs">Ver</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {solicitudesFiltradas.map((solicitud) => (
-                          <TableRow
-                            key={solicitud.id}
-                            className={
-                              solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos
-                                ? "bg-green-50"
-                                : "bg-red-50"
-                            }
-                          >
+                          <TableRow key={solicitud.id} className={getColorPorTipo(solicitud.tipoConciliacion)}>
                             <TableCell className="text-xs">{solicitud.fecha}</TableCell>
                             <TableCell className="text-xs">{solicitud.comitenteNumero}</TableCell>
                             <TableCell className="text-xs font-mono">{solicitud.cuit}</TableCell>
                             <TableCell className="text-xs">{solicitud.moneda}</TableCell>
                             <TableCell className="text-xs">{formatearNumero(solicitud.importe)}</TableCell>
-                            <TableCell>
-                              {solicitud.conciliadoRecibos ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              ) : (
-                                <XCircle className="w-4 h-4 text-red-600" />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {solicitud.conciliadoMovimientos ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              ) : (
-                                <XCircle className="w-4 h-4 text-red-600" />
-                              )}
-                            </TableCell>
+                            <TableCell>{getIconoPorTipo(solicitud.tipoConciliacion)}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(solicitud)}>
                                 <Eye className="w-4 h-4" />
@@ -666,8 +697,9 @@ export default function ConciliacionTransferencias() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="todos">Todos</SelectItem>
-                        <SelectItem value="conciliados">Conciliados</SelectItem>
-                        <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                        <SelectItem value="completos">🟢 Completos</SelectItem>
+                        <SelectItem value="por-importe">🟡 Por Importe</SelectItem>
+                        <SelectItem value="no-conciliados">🔴 No Conciliados</SelectItem>
                       </SelectContent>
                     </Select>
                     <div className="flex items-center gap-2 flex-1">
@@ -691,38 +723,19 @@ export default function ConciliacionTransferencias() {
                           <TableHead className="text-xs">CUIT</TableHead>
                           <TableHead className="text-xs">Moneda</TableHead>
                           <TableHead className="text-xs">Importe</TableHead>
-                          <TableHead className="text-xs">Solicitudes</TableHead>
-                          <TableHead className="text-xs">Mov. Banc.</TableHead>
+                          <TableHead className="text-xs">Estado</TableHead>
                           <TableHead className="text-xs">Ver</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {recibosFiltrados.map((recibo) => (
-                          <TableRow
-                            key={recibo.id}
-                            className={
-                              recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos ? "bg-green-50" : "bg-red-50"
-                            }
-                          >
+                          <TableRow key={recibo.id} className={getColorPorTipo(recibo.tipoConciliacion)}>
                             <TableCell className="text-xs">{recibo.fechaLiquidacion}</TableCell>
                             <TableCell className="text-xs">{recibo.comitenteNumero}</TableCell>
                             <TableCell className="text-xs font-mono">{recibo.cuit}</TableCell>
-                            <TableCell className="text-xs">$</TableCell>
+                            <TableCell className="text-xs">{recibo.moneda || "$"}</TableCell>
                             <TableCell className="text-xs">{formatearNumero(recibo.importe)}</TableCell>
-                            <TableCell>
-                              {recibo.conciliadoSolicitudes ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              ) : (
-                                <XCircle className="w-4 h-4 text-red-600" />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {recibo.conciliadoMovimientos ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              ) : (
-                                <XCircle className="w-4 h-4 text-red-600" />
-                              )}
-                            </TableCell>
+                            <TableCell>{getIconoPorTipo(recibo.tipoConciliacion)}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(recibo)}>
                                 <Eye className="w-4 h-4" />
@@ -750,8 +763,9 @@ export default function ConciliacionTransferencias() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="todos">Todos</SelectItem>
-                        <SelectItem value="conciliados">Conciliados</SelectItem>
-                        <SelectItem value="no-conciliados">No Conciliados</SelectItem>
+                        <SelectItem value="completos">🟢 Completos</SelectItem>
+                        <SelectItem value="por-importe">🟡 Por Importe</SelectItem>
+                        <SelectItem value="no-conciliados">🔴 No Conciliados</SelectItem>
                       </SelectContent>
                     </Select>
                     <div className="flex items-center gap-2 flex-1">
@@ -775,21 +789,13 @@ export default function ConciliacionTransferencias() {
                           <TableHead className="text-xs">CUIT</TableHead>
                           <TableHead className="text-xs">Moneda</TableHead>
                           <TableHead className="text-xs">Importe</TableHead>
-                          <TableHead className="text-xs">Solicitudes</TableHead>
-                          <TableHead className="text-xs">Recibos</TableHead>
+                          <TableHead className="text-xs">Estado</TableHead>
                           <TableHead className="text-xs">Ver</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {movimientosFiltrados.map((movimiento) => (
-                          <TableRow
-                            key={movimiento.id}
-                            className={
-                              movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos
-                                ? "bg-green-50"
-                                : "bg-red-50"
-                            }
-                          >
+                          <TableRow key={movimiento.id} className={getColorPorTipo(movimiento.tipoConciliacion)}>
                             <TableCell className="text-xs">{movimiento.fecha}</TableCell>
                             <TableCell className="text-xs truncate max-w-28" title={movimiento.beneficiario}>
                               {movimiento.beneficiario}
@@ -797,20 +803,7 @@ export default function ConciliacionTransferencias() {
                             <TableCell className="text-xs font-mono">{movimiento.cuit}</TableCell>
                             <TableCell className="text-xs">{movimiento.moneda}</TableCell>
                             <TableCell className="text-xs">{formatearNumero(movimiento.importe)}</TableCell>
-                            <TableCell>
-                              {movimiento.conciliadoSolicitudes ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              ) : (
-                                <XCircle className="w-4 h-4 text-red-600" />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {movimiento.conciliadoRecibos ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                              ) : (
-                                <XCircle className="w-4 h-4 text-red-600" />
-                              )}
-                            </TableCell>
+                            <TableCell>{getIconoPorTipo(movimiento.tipoConciliacion)}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(movimiento)}>
                                 <Eye className="w-4 h-4" />
@@ -957,12 +950,33 @@ export default function ConciliacionTransferencias() {
                 </div>
               </div>
 
+              {/* Estado de conciliación */}
+              {detallesSeleccionados.tipoConciliacion && (
+                <div className="border rounded-lg p-4 bg-blue-50">
+                  <h4 className="font-medium mb-3">Estado de Conciliación</h4>
+                  <div className="flex items-center gap-2">
+                    {getIconoPorTipo(detallesSeleccionados.tipoConciliacion)}
+                    <span className="text-sm font-medium">
+                      {detallesSeleccionados.tipoConciliacion === "completa" && "🟢 Conciliado Completo"}
+                      {detallesSeleccionados.tipoConciliacion === "por-importe" && "🟡 Conciliado por Importe"}
+                      {detallesSeleccionados.tipoConciliacion === "no-conciliado" && "🔴 No Conciliado"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Datos principales */}
               <div className="border rounded-lg p-4 bg-gray-50">
                 <h4 className="font-medium mb-3">Datos Principales</h4>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   {Object.entries(detallesSeleccionados)
-                    .filter(([key]) => !key.includes("conciliado") && key !== "datosOriginales" && key !== "id")
+                    .filter(
+                      ([key]) =>
+                        !key.includes("conciliado") &&
+                        key !== "datosOriginales" &&
+                        key !== "id" &&
+                        key !== "tipoConciliacion",
+                    )
                     .map(([key, value]) => (
                       <div key={key}>
                         <span className="font-medium text-gray-600">{key}:</span>
@@ -971,47 +985,6 @@ export default function ConciliacionTransferencias() {
                     ))}
                 </div>
               </div>
-
-              {/* Estados de conciliación */}
-              {(detallesSeleccionados.conciliadoRecibos !== undefined ||
-                detallesSeleccionados.conciliadoMovimientos !== undefined ||
-                detallesSeleccionados.conciliadoSolicitudes !== undefined) && (
-                <div className="border rounded-lg p-4 bg-blue-50">
-                  <h4 className="font-medium mb-3">Estado de Conciliación</h4>
-                  <div className="space-y-2">
-                    {detallesSeleccionados.conciliadoRecibos !== undefined && (
-                      <div className="flex items-center gap-2">
-                        {detallesSeleccionados.conciliadoRecibos ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-sm">Conciliado con Recibos</span>
-                      </div>
-                    )}
-                    {detallesSeleccionados.conciliadoMovimientos !== undefined && (
-                      <div className="flex items-center gap-2">
-                        {detallesSeleccionados.conciliadoMovimientos ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-sm">Conciliado con Movimientos</span>
-                      </div>
-                    )}
-                    {detallesSeleccionados.conciliadoSolicitudes !== undefined && (
-                      <div className="flex items-center gap-2">
-                        {detallesSeleccionados.conciliadoSolicitudes ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-sm">Conciliado con Solicitudes</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* Datos originales del Excel */}
               {detallesSeleccionados.datosOriginales && (
