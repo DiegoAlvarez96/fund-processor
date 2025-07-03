@@ -124,6 +124,12 @@ function extraerSimboloMoneda(monedaStr: string): string {
 
   console.log(`🔍 Extrayendo moneda de: "${monedaStr}" -> Upper: "${monedaUpper}"`)
 
+  // NUEVO: Si contiene "USD C", "CABLE" o "EXTERIOR", es USDC
+  if (monedaUpper.includes("USD C") || monedaUpper.includes("CABLE") || monedaUpper.includes("EXTERIOR")) {
+    console.log(`✅ Detectado USDC en: "${monedaStr}"`)
+    return "USDC"
+  }
+
   // Si contiene "USD" en cualquier parte, es USD
   if (monedaUpper.includes("USD")) {
     console.log(`✅ Detectado USD en: "${monedaStr}"`)
