@@ -387,10 +387,10 @@ Saludos`)
     return Math.round((progress.processed / progress.total) * 100)
   }, [progress.processed, progress.total])
 
-  // Ejemplo de formato mejorado con campos vacíos
-  const ejemploFormato = `MAMOGRAFIA DIGITAL SA 27267948149 B.E.GLOBALES U$S STEP UP 2035 1 Pesos 35868 837,794 30049995 MAV
-SECAR SECURITY ARGENTINA SA 30711610126 0 Pesos 445000000 MAE
-SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar MEP (Local) 1529 0,683897 1045,68 BYMA`
+  // Ejemplo de formato mejorado con separador punto y coma
+  const ejemploFormato = `MAMOGRAFIA DIGITAL SA;27267948149;B.E.GLOBALES U$S STEP UP 2035;1;Pesos;35868;837,794;30049995;;;MAV
+SECAR SECURITY ARGENTINA SA;30711610126;;0;Pesos;445000000;;;;;MAE
+SUCIC, MICAELA ELIANA;27301007089;BONO NACION ARG.U$S STEP UP 2030 LA;0;Dolar MEP (Local);1529;0,683897;1045,68;;;BYMA`
 
   return (
     <div className="space-y-6">
@@ -434,7 +434,9 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
                     <Type className="w-5 h-5 text-green-600" />
                     <div>
                       <div className="font-medium">Pegar Texto</div>
-                      <div className="text-xs text-gray-500">Copiar desde tabla o reporte</div>
+                      <div className="text-xs text-gray-500">
+                        Copiar desde tabla o reporte (separado por punto y coma)
+                      </div>
                     </div>
                   </div>
                 </SelectItem>
@@ -448,8 +450,8 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
             <AlertDescription className="text-blue-800">
               {inputMethod === "text" ? (
                 <>
-                  <strong>Método Texto:</strong> Copie y pegue los datos directamente desde una tabla o reporte. Ideal
-                  para datos rápidos pero puede tener problemas con campos vacíos.
+                  <strong>Método Texto:</strong> Copie y pegue los datos separados por punto y coma (;). Cada campo debe
+                  estar separado por ";" y cada línea representa una operación.
                 </>
               ) : (
                 <>
@@ -468,7 +470,7 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Type className="w-5 h-5" />
-              Carga de Datos por Texto
+              Carga de Datos por Texto (Separado por Punto y Coma)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -478,13 +480,16 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
                 <Info className="h-4 w-4" />
                 <AlertDescription>
                   Formato detectado: <strong>{inputFormat}</strong>
-                  {inputFormat === "mixed" && " - Se usarán múltiples métodos de parsing"}
+                  {inputFormat === "semicolon-separated" && " - ✅ Formato correcto para procesamiento"}
+                  {inputFormat !== "semicolon-separated" && " - ⚠️ Se recomienda usar separador punto y coma (;)"}
                 </AlertDescription>
               </Alert>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">Pegue aquí los datos de operaciones:</label>
+              <label className="block text-sm font-medium mb-2">
+                Pegue aquí los datos de operaciones (separados por punto y coma):
+              </label>
               <Textarea
                 value={rawData}
                 onChange={(e) => handleDataChange(e.target.value)}
@@ -493,7 +498,7 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
                 className="font-mono text-sm"
               />
               <p className="text-xs text-gray-500 mt-1">
-                💡 Tip: El sistema detecta automáticamente la estructura. Los campos vacíos se manejan correctamente.
+                💡 Tip: Use punto y coma (;) para separar cada campo. Los campos vacíos se manejan correctamente.
               </p>
             </div>
 
@@ -513,23 +518,21 @@ SUCIC, MICAELA ELIANA 27301007089 BONO NACION ARG.U$S STEP UP 2030 LA 0 Dolar ME
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Formatos soportados:</strong>
+                <strong>Formato con separador punto y coma (;):</strong>
                 <ul className="list-disc list-inside mt-1 text-sm">
                   <li>
-                    <strong>Estructura completa:</strong> Cliente CUIT Especie Plazo Moneda CantComprada PrecioCompra
-                    MontoComprado CantVendida PrecioVenta MontoVendido Mercado
+                    <strong>Estructura:</strong>{" "}
+                    Cliente;CUIT;Especie;Plazo;Moneda;CantComprada;PrecioCompra;MontoComprado;CantVendida;PrecioVenta;MontoVendido;Mercado
                   </li>
                   <li>
-                    <strong>Estructura simplificada:</strong> Cliente CUIT Plazo Moneda Cantidad Mercado
+                    <strong>Campos vacíos:</strong> Deje el espacio entre punto y comas vacío (ej: Cliente;;Especie)
                   </li>
                   <li>
-                    <strong>Campos vacíos:</strong> Se detectan automáticamente y se rellenan con "0" o valores por
-                    defecto
-                  </li>
-                  <li>
-                    Cada línea debe terminar con <strong>BYMA</strong>, <strong>MAV</strong> o <strong>MAE</strong>
+                    <strong>Mercado:</strong> Debe ser <strong>BYMA</strong>, <strong>MAV</strong> o{" "}
+                    <strong>MAE</strong>
                   </li>
                   <li>El CUIT puede estar en formato numérico (27267948149) o científico (3,07E+10)</li>
+                  <li>Cada línea representa una operación completa</li>
                 </ul>
               </AlertDescription>
             </Alert>
