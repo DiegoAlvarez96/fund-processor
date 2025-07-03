@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +18,24 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(true)
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const logout = useCallback(() => {
+    setIsAuthenticated(false)
+    setShowLoginModal(true)
+    sessionStorage.removeItem("authenticated")
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+    }
+  }, [])
+
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+    }
+    // 30 minutos en milisegundos
+    inactivityTimerRef.current = setTimeout(logout, 30 * 60 * 1000)
+  }, [logout])
 
   useEffect(() => {
     // Verificar si ya está autenticado en sessionStorage
@@ -25,14 +43,42 @@ export default function Home() {
     if (authenticated === "true") {
       setIsAuthenticated(true)
       setShowLoginModal(false)
+      resetInactivityTimer() // Iniciar el temporizador al cargar si ya está autenticado
     }
-  }, [])
+
+    // Configurar listeners de actividad solo si está autenticado
+    const setupActivityListeners = () => {
+      window.addEventListener("mousemove", resetInactivityTimer)
+      window.addEventListener("keydown", resetInactivityTimer)
+      window.addEventListener("click", resetInactivityTimer)
+    }
+
+    const cleanupActivityListeners = () => {
+      window.removeEventListener("mousemove", resetInactivityTimer)
+      window.removeEventListener("keydown", resetInactivityTimer)
+      window.removeEventListener("click", resetInactivityTimer)
+    }
+
+    if (isAuthenticated) {
+      setupActivityListeners()
+    } else {
+      cleanupActivityListeners()
+    }
+
+    return () => {
+      cleanupActivityListeners()
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current)
+      }
+    }
+  }, [isAuthenticated, resetInactivityTimer])
 
   const handleLogin = (success: boolean) => {
     if (success) {
       setIsAuthenticated(true)
       setShowLoginModal(false)
       sessionStorage.setItem("authenticated", "true")
+      resetInactivityTimer() // Iniciar el temporizador después de un login exitoso
     }
   }
 
