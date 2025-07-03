@@ -91,7 +91,7 @@ export default function Dashboard() {
               Sistema de conciliación entre solicitudes, recibos y movimientos bancarios
             </p>
             <ul className="text-sm text-gray-500 space-y-2">
-              <li>• Conciliación automática de transferencias</li>
+              <li>�� Conciliación automática de transferencias</li>
               <li>• Análisis de movimientos bancarios</li>
               <li>• Separación de mercados y transferencias</li>
               <li>• Exportación de resultados a Excel</li>
