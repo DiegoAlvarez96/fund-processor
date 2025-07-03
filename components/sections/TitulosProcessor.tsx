@@ -512,6 +512,17 @@ SUCIC, MICAELA ELIANA;27301007089;BONO NACION ARG.U$S STEP UP 2030 LA;0;Dolar ME
               >
                 📋 Ejemplo de Formato
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const formula = '=+A1&";"&B1&";"&C1&";"&D1&";"&E1&";"&F1&";"&G1&";"&H1&";"&I1&";"&J1&";"&K1&";"&L1'
+                  navigator.clipboard.writeText(formula)
+                  toast({ title: "Fórmula copiada", description: "Fórmula de Excel copiada al portapapeles" })
+                }}
+                className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+              >
+                📊 Fórmula Excel
+              </Button>
             </div>
 
             {/* Ayuda para formatos */}
