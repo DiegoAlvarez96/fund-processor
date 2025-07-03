@@ -14,11 +14,11 @@ export interface TituloOperacion {
   mercado: string
 }
 
-// Parser mejorado para datos tabulados con validación estricta de 12 columnas
+// Parser mejorado para datos separados por punto y coma (;)
 export function parseTitulosData(rawData: string): TituloOperacion[] {
   if (!rawData.trim()) return []
 
-  console.log("🔄 Iniciando parser mejorado de datos de títulos...")
+  console.log("🔄 Iniciando parser para datos separados por punto y coma...")
   console.log("📄 Datos recibidos:", rawData.substring(0, 300) + "...")
 
   const lines = rawData.trim().split(/\r\n|\r|\n/)
@@ -43,8 +43,8 @@ export function parseTitulosData(rawData: string): TituloOperacion[] {
     try {
       console.log(`📋 Procesando línea ${index + 1}: "${line}"`)
 
-      // Nuevo método: Parser específico para el formato correcto
-      const operacion = parseLineWith12Columns(line, index + 1)
+      // Nuevo método: Parser específico para formato separado por punto y coma
+      const operacion = parseLineWithSemicolonSeparator(line, index + 1)
 
       if (operacion) {
         operaciones.push(operacion)
@@ -71,121 +71,100 @@ export function parseTitulosData(rawData: string): TituloOperacion[] {
   return operaciones
 }
 
-// Parser específico para líneas con exactamente 12 columnas
-function parseLineWith12Columns(line: string, lineNumber: number): TituloOperacion | null {
-  // Buscar mercado al final (debe ser BYMA, MAV o MAE)
-  const mercadoMatch = line.match(/(BYMA|MAV|MAE)\s*$/i)
-  if (!mercadoMatch) {
-    console.warn(`⚠️ Línea ${lineNumber}: No se encontró mercado válido al final`)
+// Parser específico para líneas separadas por punto y coma (;)
+function parseLineWithSemicolonSeparator(line: string, lineNumber: number): TituloOperacion | null {
+  console.log(`🔍 Línea ${lineNumber}: Parseando con separador punto y coma: "${line}"`)
+
+  // Dividir por punto y coma
+  const parts = line.split(";").map((part) => part.trim())
+
+  console.log(`🔍 Línea ${lineNumber}: Partes encontradas (${parts.length}):`, parts)
+
+  // Validar que tengamos al menos los campos mínimos
+  if (parts.length < 3) {
+    console.warn(`⚠️ Línea ${lineNumber}: Muy pocos campos (${parts.length}), se esperan al menos 3`)
     return null
   }
 
-  const mercado = mercadoMatch[1].toUpperCase()
-  const dataWithoutMercado = line.replace(/(BYMA|MAV|MAE)\s*$/i, "").trim()
-
-  // Buscar CUIT (formato científico como 3,07E+10 o numérico largo)
-  const cuitMatch = dataWithoutMercado.match(/(\d+,\d+E[+-]\d+|\d{8,})/i)
-  if (!cuitMatch) {
-    console.warn(`⚠️ Línea ${lineNumber}: No se encontró CUIT válido`)
-    return null
-  }
-
-  const cuit = cuitMatch[1]
-  const cuitIndex = dataWithoutMercado.indexOf(cuit)
-
-  // Nombre del cliente es todo lo que está antes del CUIT
-  const denominacionCliente = dataWithoutMercado.substring(0, cuitIndex).trim()
-  if (!denominacionCliente) {
-    console.warn(`⚠️ Línea ${lineNumber}: No se encontró nombre de cliente`)
-    return null
-  }
-
-  // El resto está después del CUIT
-  const afterCuit = dataWithoutMercado.substring(cuitIndex + cuit.length).trim()
-
-  // Dividir por espacios, pero manteniendo juntos los números decimales
-  const parts = afterCuit.split(/\s+/)
-
-  // Necesitamos encontrar dónde termina la especie y empiezan los números
-  // La especie puede contener números (como "2030", "2035"), pero los campos numéricos
-  // son los últimos 7 campos antes del mercado
-
-  if (parts.length < 7) {
-    console.warn(`⚠️ Línea ${lineNumber}: Insuficientes campos después del CUIT (${parts.length}, esperados al menos 7)`)
-    return null
-  }
-
-  // Los últimos 7 campos son: plazo, moneda, cantComprada, precioCompra, montoComprado, cantVendida, precioVenta, montoVendido
-  // Pero algunos pueden estar vacíos, así que buscamos los últimos campos numéricos
-
-  // Identificar los últimos campos numéricos
-  const numericFields = []
-  const especieParts = []
-
-  // Recorrer desde el final hacia atrás para identificar campos numéricos
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    // Es numérico si es un número (con o sin decimales/comas)
-    if (/^[\d,]+([.,]\d+)?$/.test(part) || part === "0") {
-      numericFields.unshift(part)
-      if (numericFields.length >= 7) break // Máximo 7 campos numéricos
-    } else {
-      // Si encontramos algo no numérico después de haber encontrado números,
-      // el resto es parte de la especie
-      especieParts.unshift(...parts.slice(0, i + 1))
-      break
-    }
-  }
-
-  // Si no encontramos suficientes campos numéricos, tomar lo que podamos
-  if (numericFields.length < 3) {
-    console.warn(`⚠️ Línea ${lineNumber}: Insuficientes campos numéricos (${numericFields.length})`)
-    return null
-  }
-
-  const especie = especieParts.join(" ").trim()
-
-  // Asignar campos con valores por defecto
-  const plazo = numericFields[0] || "0"
-  const moneda = "Pesos" // Por defecto, ya que no siempre viene en los datos
-  const cantidadComprada = numericFields[1] || "0"
-  const precioPromedioCompra = numericFields[2] || "0"
-  const montoComprado = numericFields[3] || "0"
-  const cantidadVendida = numericFields[4] || "0"
-  const precioPromedioVenta = numericFields[5] || "0"
-  const montoVendido = numericFields[6] || "0"
-
-  // Validar que tenemos los campos mínimos
-  if (!especie) {
-    console.warn(`⚠️ Línea ${lineNumber}: No se pudo extraer la especie`)
-    return null
-  }
+  // Estructura esperada con punto y coma:
+  // 0: Denominación Cliente
+  // 1: CUIT/CUIL
+  // 2: Especie
+  // 3: Plazo
+  // 4: Moneda
+  // 5: Cantidad Comprada
+  // 6: Precio Promedio Compra
+  // 7: Monto Comprado
+  // 8: Cantidad Vendida
+  // 9: Precio Promedio Venta
+  // 10: Monto Vendido
+  // 11: Mercado
 
   const operacion: TituloOperacion = {
-    denominacionCliente,
-    cuitCuil: cuit,
-    especie,
-    plazo,
-    moneda,
-    cantidadComprada,
-    precioPromedioCompra,
-    montoComprado,
-    cantidadVendida,
-    precioPromedioVenta,
-    montoVendido,
-    mercado,
+    denominacionCliente: parts[0] || "",
+    cuitCuil: parts[1] || "",
+    especie: parts[2] || "",
+    plazo: parts[3] || "0",
+    moneda: parts[4] || "Pesos",
+    cantidadComprada: parts[5] || "0",
+    precioPromedioCompra: parts[6] || "0",
+    montoComprado: parts[7] || "0",
+    cantidadVendida: parts[8] || "0",
+    precioPromedioVenta: parts[9] || "0",
+    montoVendido: parts[10] || "0",
+    mercado: parts[11] || "BYMA",
+  }
+
+  // Validar campos críticos
+  if (!operacion.denominacionCliente) {
+    console.warn(`⚠️ Línea ${lineNumber}: Falta denominación del cliente`)
+    return null
+  }
+
+  if (!operacion.cuitCuil) {
+    console.warn(`⚠️ Línea ${lineNumber}: Falta CUIT/CUIL`)
+    return null
+  }
+
+  // Validar mercado
+  const mercadosValidos = ["BYMA", "MAV", "MAE"]
+  if (!mercadosValidos.includes(operacion.mercado.toUpperCase())) {
+    console.warn(`⚠️ Línea ${lineNumber}: Mercado no válido: ${operacion.mercado}`)
+    // Intentar detectar mercado en otros campos
+    const mercadoDetectado = detectarMercadoEnLinea(line)
+    if (mercadoDetectado) {
+      operacion.mercado = mercadoDetectado
+    } else {
+      operacion.mercado = "BYMA" // Por defecto
+    }
+  } else {
+    operacion.mercado = operacion.mercado.toUpperCase()
   }
 
   // Log para debug
   console.log(`📋 Línea ${lineNumber} parseada:`, {
-    cliente: denominacionCliente,
-    cuit: cuit,
-    especie: especie,
-    mercado: mercado,
-    numericFields: numericFields.length,
+    cliente: operacion.denominacionCliente,
+    cuit: operacion.cuitCuil,
+    especie: operacion.especie,
+    mercado: operacion.mercado,
+    campos: parts.length,
   })
 
   return operacion
+}
+
+// Función auxiliar para detectar mercado en la línea completa
+function detectarMercadoEnLinea(line: string): string | null {
+  const mercados = ["BYMA", "MAV", "MAE"]
+  const lineUpper = line.toUpperCase()
+
+  for (const mercado of mercados) {
+    if (lineUpper.includes(mercado)) {
+      return mercado
+    }
+  }
+
+  return null
 }
 
 // Función auxiliar para limpiar y normalizar datos
@@ -197,7 +176,9 @@ function cleanField(field: string): string {
 export function detectInputFormat(rawData: string): string {
   const sample = rawData.substring(0, 500)
 
-  if (sample.includes("\t")) {
+  if (sample.includes(";")) {
+    return "semicolon-separated"
+  } else if (sample.includes("\t")) {
     return "tab-separated"
   } else if (sample.match(/\s{2,}/)) {
     return "space-separated"
@@ -208,9 +189,9 @@ export function detectInputFormat(rawData: string): string {
   }
 }
 
-// Parser específico para datos copiados de Excel/tablas
+// Parser específico para datos copiados de Excel/tablas con punto y coma
 export function parseFromTableCopy(rawData: string): TituloOperacion[] {
-  console.log("🔄 Usando parser específico para datos de tabla...")
+  console.log("🔄 Usando parser específico para datos de tabla con punto y coma...")
 
   const lines = rawData.trim().split(/\r\n|\r|\n/)
   const operaciones: TituloOperacion[] = []
@@ -218,7 +199,7 @@ export function parseFromTableCopy(rawData: string): TituloOperacion[] {
   lines.forEach((line, index) => {
     if (!line.trim()) return
 
-    const operacion = parseLineWith12Columns(line, index + 1)
+    const operacion = parseLineWithSemicolonSeparator(line, index + 1)
     if (operacion) {
       operaciones.push(operacion)
     }
@@ -262,7 +243,7 @@ export async function parseTitulosDataBatched(
 ): Promise<TituloOperacion[]> {
   if (!rawData.trim()) return []
 
-  console.log("🔄 Iniciando procesamiento por lotes...")
+  console.log("🔄 Iniciando procesamiento por lotes con separador punto y coma...")
 
   const lines = rawData.trim().split(/\r\n|\r|\n/)
   const dataLines = lines.filter((line) => {
@@ -332,7 +313,7 @@ async function processBatch(lines: string[], startIndex: number): Promise<Titulo
       const globalIndex = startIndex + index
       console.log(`📋 Procesando línea ${globalIndex + 1}: "${line.substring(0, 50)}..."`)
 
-      const operacion = parseLineWith12Columns(line, globalIndex + 1)
+      const operacion = parseLineWithSemicolonSeparator(line, globalIndex + 1)
       if (operacion) {
         operaciones.push(operacion)
       }
