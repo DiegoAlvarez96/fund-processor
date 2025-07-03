@@ -1,90 +1,61 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { FileText, Building2, TrendingUp, ArrowRightLeft, BarChart3, LogOut } from "lucide-react"
-
-// Importar componentes
+import { Button } from "@/components/ui/button"
+import { LogOut, Clock, Shield, TrendingUp, Building2, FileText, BarChart3 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import Dashboard from "@/components/sections/Dashboard"
+import BankFiles from "@/components/sections/BankFiles"
 import FundProcessor from "@/components/sections/FundProcessor"
-import BankFileProcessor from "@/components/sections/bank-file-processor"
 import TitulosProcessor from "@/components/sections/TitulosProcessor"
 import ConciliacionTransferencias from "@/components/sections/conciliacion-transferencias"
 import LoginModal from "@/components/sections/LoginModal"
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("dashboard")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [showLoginModal, setShowLoginModal] = useState(true)
-  const [timeRemaining, setTimeRemaining] = useState(30 * 60) // 30 minutos en segundos
-  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(30 * 60) // 30 minutos en segundos
+  const [isActive, setIsActive] = useState(true)
+  const timeoutRef = useRef<NodeJS.Timeout>()
+  const intervalRef = useRef<NodeJS.Timeout>()
+  const { toast } = useToast()
 
-  const logout = useCallback(() => {
-    setIsAuthenticated(false)
-    setShowLoginModal(true)
-    sessionStorage.removeItem("authenticated")
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current)
+  // Verificar autenticación al cargar
+  useEffect(() => {
+    const authData = sessionStorage.getItem("auth_session")
+    if (authData) {
+      try {
+        const { timestamp } = JSON.parse(authData)
+        const now = Date.now()
+        const elapsed = (now - timestamp) / 1000 // segundos transcurridos
+        const remaining = Math.max(0, 30 * 60 - elapsed)
+
+        if (remaining > 0) {
+          setIsAuthenticated(true)
+          setTimeLeft(Math.floor(remaining))
+          startInactivityTimer()
+        } else {
+          // Sesión expirada
+          handleLogout()
+        }
+      } catch (error) {
+        console.error("Error parsing auth data:", error)
+        handleLogout()
+      }
+    } else {
+      setShowLoginModal(true)
     }
   }, [])
 
-  const resetInactivityTimer = useCallback(() => {
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current)
-    }
-    // Reset countdown
-    setTimeRemaining(30 * 60)
-    // 30 minutos en milisegundos
-    inactivityTimerRef.current = setTimeout(logout, 30 * 60 * 1000)
-  }, [logout])
-
-  useEffect(() => {
-    // Verificar si ya está autenticado en sessionStorage
-    const authenticated = sessionStorage.getItem("authenticated")
-    if (authenticated === "true") {
-      setIsAuthenticated(true)
-      setShowLoginModal(false)
-      resetInactivityTimer() // Iniciar el temporizador al cargar si ya está autenticado
-    }
-
-    // Configurar listeners de actividad solo si está autenticado
-    const setupActivityListeners = () => {
-      window.addEventListener("mousemove", resetInactivityTimer)
-      window.addEventListener("keydown", resetInactivityTimer)
-      window.addEventListener("click", resetInactivityTimer)
-    }
-
-    const cleanupActivityListeners = () => {
-      window.removeEventListener("mousemove", resetInactivityTimer)
-      window.removeEventListener("keydown", resetInactivityTimer)
-      window.removeEventListener("click", resetInactivityTimer)
-    }
-
-    if (isAuthenticated) {
-      setupActivityListeners()
-    } else {
-      cleanupActivityListeners()
-    }
-
-    return () => {
-      cleanupActivityListeners()
-      if (inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current)
-      }
-    }
-  }, [isAuthenticated, resetInactivityTimer])
-
   // Contador regresivo
   useEffect(() => {
-    let countdownInterval: NodeJS.Timeout | null = null
-
-    if (isAuthenticated) {
-      countdownInterval = setInterval(() => {
-        setTimeRemaining((prev) => {
+    if (isAuthenticated && timeLeft > 0) {
+      intervalRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
           if (prev <= 1) {
-            return 30 * 60 // Reset to 30 minutes
+            handleLogout()
+            return 0
           }
           return prev - 1
         })
@@ -92,9 +63,60 @@ export default function Home() {
     }
 
     return () => {
-      if (countdownInterval) {
-        clearInterval(countdownInterval)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
       }
+    }
+  }, [isAuthenticated, timeLeft])
+
+  // Manejar actividad del usuario
+  const resetInactivityTimer = () => {
+    if (!isAuthenticated) return
+
+    setTimeLeft(30 * 60) // Resetear a 30 minutos
+    setIsActive(true)
+
+    // Actualizar timestamp en sessionStorage
+    const authData = {
+      authenticated: true,
+      timestamp: Date.now(),
+    }
+    sessionStorage.setItem("auth_session", JSON.stringify(authData))
+
+    // Limpiar timeout anterior
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+
+    startInactivityTimer()
+  }
+
+  const startInactivityTimer = () => {
+    timeoutRef.current = setTimeout(
+      () => {
+        setIsActive(false)
+        handleLogout()
+      },
+      30 * 60 * 1000,
+    ) // 30 minutos
+  }
+
+  // Eventos de actividad
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart", "click"]
+
+    const resetTimer = () => resetInactivityTimer()
+
+    events.forEach((event) => {
+      document.addEventListener(event, resetTimer, true)
+    })
+
+    return () => {
+      events.forEach((event) => {
+        document.removeEventListener(event, resetTimer, true)
+      })
     }
   }, [isAuthenticated])
 
@@ -102,188 +124,146 @@ export default function Home() {
     if (success) {
       setIsAuthenticated(true)
       setShowLoginModal(false)
-      sessionStorage.setItem("authenticated", "true")
-      resetInactivityTimer() // Iniciar el temporizador después de un login exitoso
+      setTimeLeft(30 * 60)
+
+      // Guardar en sessionStorage
+      const authData = {
+        authenticated: true,
+        timestamp: Date.now(),
+      }
+      sessionStorage.setItem("auth_session", JSON.stringify(authData))
+
+      startInactivityTimer()
+
+      toast({
+        title: "Acceso autorizado",
+        description: "Bienvenido al sistema",
+      })
+    } else {
+      toast({
+        title: "Acceso denegado",
+        description: "Credenciales incorrectas",
+        variant: "destructive",
+      })
     }
   }
 
+  const handleLogout = () => {
+    setIsAuthenticated(false)
+    setShowLoginModal(true)
+    setTimeLeft(30 * 60)
+
+    // Limpiar sessionStorage
+    sessionStorage.removeItem("auth_session")
+
+    // Limpiar timers
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+    }
+
+    toast({
+      title: "Sesión cerrada",
+      description: "Has sido desconectado del sistema",
+    })
+  }
+
+  // Formatear tiempo restante
   const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
+
+  if (!isAuthenticated) {
+    return <LoginModal isOpen={showLoginModal} onLogin={handleLogin} />
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {isAuthenticated ? (
-        <div className="container mx-auto p-6 relative">
-          {/* Botón de logout discreto en esquina superior derecha */}
-          <div className="absolute top-4 right-4 z-10">
-            <div className="bg-white rounded-lg shadow-sm border p-2">
-              <button
-                onClick={logout}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-red-600 transition-colors"
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header con botón de logout */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Shield className="w-6 h-6 text-blue-600" />
+                Sistema de Gestión de Operaciones
+              </h1>
+              <p className="text-sm text-gray-600">
+                Sistema integral de gestión financiera para el procesamiento de fondos de inversión y archivos bancarios
+              </p>
+            </div>
+
+            {/* Botón de logout discreto en la esquina superior derecha */}
+            <div className="flex flex-col items-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-gray-600 hover:text-red-600 hover:border-red-300 bg-transparent"
               >
-                <LogOut className="w-3 h-3" />
+                <LogOut className="w-4 h-4" />
                 Cerrar sesión
-              </button>
-              <div className="text-xs text-gray-500 mt-1 text-center">{formatTime(timeRemaining)}</div>
+              </Button>
+              <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                <Clock className="w-3 h-3" />
+                {formatTime(timeLeft)}
+              </div>
             </div>
           </div>
-
-          {/* Header */}
-          <div className="mb-8 pt-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Sistema de Gestión de Operaciones</h1>
-            <p className="text-gray-600 text-lg">
-              Sistema integral de gestión financiera para el procesamiento de fondos de inversión y archivos bancarios
-            </p>
-          </div>
-
-          {/* Navigation Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-5">
-              <TabsTrigger value="dashboard" className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4" />
-                Dashboard
-              </TabsTrigger>
-              <TabsTrigger value="fondos" className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" />
-                Fondos FCI
-              </TabsTrigger>
-              <TabsTrigger value="archivos-bancarios" className="flex items-center gap-2">
-                <Building2 className="w-4 h-4" />
-                Archivos Bancarios
-              </TabsTrigger>
-              <TabsTrigger value="titulos" className="flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Títulos
-              </TabsTrigger>
-              <TabsTrigger value="conciliacion" className="flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4" />
-                Conciliación
-              </TabsTrigger>
-            </TabsList>
-
-            {/* Dashboard Tab */}
-            <TabsContent value="dashboard" className="space-y-6">
-              <Dashboard />
-            </TabsContent>
-
-            {/* Fondos FCI Tab */}
-            <TabsContent value="fondos" className="space-y-6">
-              <div className="grid gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5" />
-                      Procesador de Fondos FCI
-                    </CardTitle>
-                    <CardDescription>
-                      Procese transacciones de fondos comunes de inversión y genere archivos para diferentes bancos
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Badge variant="secondary">Excel/CSV</Badge>
-                      <Badge variant="secondary">Múltiples Bancos</Badge>
-                      <Badge variant="secondary">Validación Automática</Badge>
-                      <Badge variant="secondary">Exportación</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-                <FundProcessor />
-              </div>
-            </TabsContent>
-
-            {/* Archivos Bancarios Tab */}
-            <TabsContent value="archivos-bancarios" className="space-y-6">
-              <div className="grid gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Building2 className="w-5 h-5" />
-                      Procesador de Archivos Bancarios
-                    </CardTitle>
-                    <CardDescription>
-                      Genere archivos bancarios para diferentes entidades financieras con validación automática
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Badge variant="secondary">Múltiples Bancos</Badge>
-                      <Badge variant="secondary">Validación CUIT</Badge>
-                      <Badge variant="secondary">Formatos Específicos</Badge>
-                      <Badge variant="secondary">Descarga Directa</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-                <BankFileProcessor />
-              </div>
-            </TabsContent>
-
-            {/* Títulos Tab */}
-            <TabsContent value="titulos" className="space-y-6">
-              <div className="grid gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="w-5 h-5" />
-                      Procesador de Títulos
-                    </CardTitle>
-                    <CardDescription>
-                      Procese archivos Excel de títulos valores con validación y generación de emails automáticos
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Badge variant="secondary">Excel Processing</Badge>
-                      <Badge variant="secondary">Email Generation</Badge>
-                      <Badge variant="secondary">Data Validation</Badge>
-                      <Badge variant="secondary">Bulk Operations</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-                <TitulosProcessor />
-              </div>
-            </TabsContent>
-
-            {/* Conciliación Tab */}
-            <TabsContent value="conciliacion" className="space-y-6">
-              <div className="grid gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <ArrowRightLeft className="w-5 h-5" />
-                      Conciliación de Transferencias
-                    </CardTitle>
-                    <CardDescription>
-                      Sistema de conciliación automática entre solicitudes de pago, recibos y movimientos bancarios
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Badge variant="secondary">Conciliación Automática</Badge>
-                      <Badge variant="secondary">Múltiples Archivos</Badge>
-                      <Badge variant="secondary">Validación Cruzada</Badge>
-                      <Badge variant="secondary">Reportes Detallados</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-                <ConciliacionTransferencias />
-              </div>
-            </TabsContent>
-          </Tabs>
         </div>
-      ) : (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Sistema de Gestión de Operaciones</h1>
-            <p className="text-gray-600">Cargando...</p>
-          </div>
-        </div>
-      )}
-      {/* Modal de Login */}
-      <LoginModal isOpen={showLoginModal && !isAuthenticated} onLogin={handleLogin} />
+      </div>
+
+      {/* Contenido principal */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs defaultValue="dashboard" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5 bg-white shadow-sm">
+            <TabsTrigger value="dashboard" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="bank-files" className="flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              Archivos Bancarios
+            </TabsTrigger>
+            <TabsTrigger value="fund-processor" className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Fondos FCI
+            </TabsTrigger>
+            <TabsTrigger value="titulos" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Títulos
+            </TabsTrigger>
+            <TabsTrigger value="conciliacion" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Conciliación
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="dashboard">
+            <Dashboard />
+          </TabsContent>
+
+          <TabsContent value="bank-files">
+            <BankFiles />
+          </TabsContent>
+
+          <TabsContent value="fund-processor">
+            <FundProcessor />
+          </TabsContent>
+
+          <TabsContent value="titulos">
+            <TitulosProcessor />
+          </TabsContent>
+
+          <TabsContent value="conciliacion">
+            <ConciliacionTransferencias />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   )
 }
