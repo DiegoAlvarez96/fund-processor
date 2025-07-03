@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { FileText, Building2, TrendingUp, ArrowRightLeft, BarChart3 } from "lucide-react"
+import { FileText, Building2, TrendingUp, ArrowRightLeft, BarChart3, LogOut } from "lucide-react"
 
 // Importar componentes
 import Dashboard from "@/components/sections/Dashboard"
@@ -18,6 +18,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(true)
+  const [timeRemaining, setTimeRemaining] = useState(30 * 60) // 30 minutos en segundos
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const logout = useCallback(() => {
@@ -33,6 +34,8 @@ export default function Home() {
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current)
     }
+    // Reset countdown
+    setTimeRemaining(30 * 60)
     // 30 minutos en milisegundos
     inactivityTimerRef.current = setTimeout(logout, 30 * 60 * 1000)
   }, [logout])
@@ -73,6 +76,28 @@ export default function Home() {
     }
   }, [isAuthenticated, resetInactivityTimer])
 
+  // Contador regresivo
+  useEffect(() => {
+    let countdownInterval: NodeJS.Timeout | null = null
+
+    if (isAuthenticated) {
+      countdownInterval = setInterval(() => {
+        setTimeRemaining((prev) => {
+          if (prev <= 1) {
+            return 30 * 60 // Reset to 30 minutes
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval)
+      }
+    }
+  }, [isAuthenticated])
+
   const handleLogin = (success: boolean) => {
     if (success) {
       setIsAuthenticated(true)
@@ -82,15 +107,35 @@ export default function Home() {
     }
   }
 
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {isAuthenticated ? (
-        <div className="container mx-auto p-6">
+        <div className="container mx-auto p-6 relative">
+          {/* Botón de logout discreto en esquina superior derecha */}
+          <div className="absolute top-4 right-4 z-10">
+            <div className="bg-white rounded-lg shadow-sm border p-2">
+              <button
+                onClick={logout}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-red-600 transition-colors"
+              >
+                <LogOut className="w-3 h-3" />
+                Cerrar sesión
+              </button>
+              <div className="text-xs text-gray-500 mt-1 text-center">{formatTime(timeRemaining)}</div>
+            </div>
+          </div>
+
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Sistema de Procesamiento Financiero</h1>
+          <div className="mb-8 pt-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Sistema de Gestión de Operaciones</h1>
             <p className="text-gray-600 text-lg">
-              Plataforma integral para el procesamiento de archivos financieros y conciliación bancaria
+              Sistema integral de gestión financiera para el procesamiento de fondos de inversión y archivos bancarios
             </p>
           </div>
 
@@ -232,7 +277,7 @@ export default function Home() {
       ) : (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Sistema de Procesamiento Financiero</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Sistema de Gestión de Operaciones</h1>
             <p className="text-gray-600">Cargando...</p>
           </div>
         </div>
