@@ -277,7 +277,7 @@ export default function TitulosProcessor() {
     }
   }
 
-  // Generar y enviar emails directamente
+  // Generar y enviar emails directamente con delay de 1 segundo entre cada email
   const generarYEnviarEmails = async () => {
     if (operaciones.length === 0) {
       toast({
@@ -288,16 +288,19 @@ export default function TitulosProcessor() {
       return
     }
 
+    setIsProcessing(true)
+
     // Generar Excel si no están generados
     if (Object.keys(excelFiles).length === 0) {
       await generarExcel()
     }
 
     // Esperar un momento para que se generen los archivos
-    setTimeout(() => {
+    setTimeout(async () => {
       const mercadosConDatos = Object.keys(excelFiles).filter((mercado) => mercadoSummary[mercado] > 0)
 
-      mercadosConDatos.forEach((mercado) => {
+      for (let i = 0; i < mercadosConDatos.length; i++) {
+        const mercado = mercadosConDatos[i]
         const config = MERCADO_CONFIG[mercado]
         const fileName = getFileName(mercado)
         const fileBlob = excelFiles[mercado]
@@ -306,7 +309,7 @@ export default function TitulosProcessor() {
           // Crear URL del blob para descarga
           const fileUrl = URL.createObjectURL(fileBlob)
 
-          // Construir mailto link
+          // Construir mailto link con CC a operaciones@ad-cap.com.ar
           const subject = encodeURIComponent(config.asunto)
           const body = encodeURIComponent(`Estimados, Buenas tardes,
 
@@ -316,8 +319,9 @@ Por favor confirmar recepción
 
 Saludos`)
           const to = encodeURIComponent(config.destinatarios)
+          const cc = encodeURIComponent("operaciones@ad-cap.com.ar")
 
-          const mailtoLink = `mailto:${to}?subject=${subject}&body=${body}`
+          const mailtoLink = `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`
 
           // Abrir Outlook
           window.open(mailtoLink, "_blank")
@@ -335,12 +339,19 @@ Saludos`)
           setTimeout(() => {
             URL.revokeObjectURL(fileUrl)
           }, 1000)
+
+          // Delay de 1 segundo entre cada email (excepto el último)
+          if (i < mercadosConDatos.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+          }
         }
-      })
+      }
+
+      setIsProcessing(false)
 
       toast({
         title: "Emails y archivos preparados",
-        description: `Se abrieron ${mercadosConDatos.length} emails en Outlook y se descargaron los archivos Excel. Adjunte manualmente los archivos descargados.`,
+        description: `Se abrieron ${mercadosConDatos.length} emails en Outlook con CC a operaciones@ad-cap.com.ar y se descargaron los archivos Excel. Adjunte manualmente los archivos descargados.`,
       })
     }, 1000)
   }
@@ -681,7 +692,7 @@ SUCIC, MICAELA ELIANA;27301007089;BONO NACION ARG.U$S STEP UP 2030 LA;0;Dolar ME
 
               <Button onClick={generarYEnviarEmails} disabled={isProcessing} className="bg-blue-600 hover:bg-blue-700">
                 <Send className="w-4 h-4 mr-2" />
-                Generar Emails
+                {isProcessing ? "Generando Emails..." : "Generar Emails"}
               </Button>
 
               <Button
