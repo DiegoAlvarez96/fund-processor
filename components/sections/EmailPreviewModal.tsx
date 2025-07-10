@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Mail, Paperclip, ExternalLink, X } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Mail, Paperclip, ExternalLink, X, Download, Copy, Info } from "lucide-react"
 import { MERCADO_CONFIG, EMAIL_TEMPLATE } from "@/lib/titulos-config"
 import { getFileName } from "@/lib/titulos-excel"
 import { useToast } from "@/hooks/use-toast"
@@ -60,12 +61,10 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
     return `${sizeInKB} KB`
   }
 
-  const openInOutlook = (mercado: string) => {
-    const emailData = emailsData[mercado]
+  const downloadFile = (mercado: string) => {
     const fileName = getFileName(mercado)
-
-    // Crear URL del archivo para adjuntar
     const fileBlob = excelFiles[mercado]
+
     if (!fileBlob) {
       toast({
         title: "Error",
@@ -75,85 +74,64 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
       return
     }
 
-    // Crear URL del blob
+    // Crear URL del blob y descargar
     const fileUrl = URL.createObjectURL(fileBlob)
+    const downloadLink = document.createElement("a")
+    downloadLink.href = fileUrl
+    downloadLink.download = fileName
+    downloadLink.style.display = "none"
+    document.body.appendChild(downloadLink)
+    downloadLink.click()
+    document.body.removeChild(downloadLink)
+    URL.revokeObjectURL(fileUrl)
 
-    // Construir mailto link
+    toast({
+      title: "Archivo descargado",
+      description: `${fileName} se descargó correctamente`,
+    })
+  }
+
+  const copyEmailData = (mercado: string) => {
+    const emailData = emailsData[mercado]
+    const emailText = `Para: ${emailData.destinatarios}
+CC: operaciones@ad-cap.com.ar
+Asunto: ${emailData.asunto}
+
+${emailData.mensaje}`
+
+    navigator.clipboard.writeText(emailText).then(() => {
+      toast({
+        title: "Email copiado",
+        description: "Los datos del email se copiaron al portapapeles",
+      })
+    })
+  }
+
+  // Función que abre los emails con CC incluido y delay de 1 segundo
+  const openInOutlook = async (mercado: string) => {
+    const emailData = emailsData[mercado]
+
+    // Construir mailto link con CC a operaciones@ad-cap.com.ar
     const subject = encodeURIComponent(emailData.asunto)
     const body = encodeURIComponent(emailData.mensaje.replace(/<p>/g, "\n\n"))
     const to = encodeURIComponent(emailData.destinatarios)
+    const cc = encodeURIComponent("operaciones@ad-cap.com.ar")
 
-    // Crear un formulario temporal para enviar el archivo
-    const form = document.createElement("form")
-    form.method = "POST"
-    form.enctype = "multipart/form-data"
-    form.style.display = "none"
+    const mailtoLink = `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`
 
-    // Crear input para el archivo
-    const fileInput = document.createElement("input")
-    fileInput.type = "file"
-    fileInput.name = "attachment"
+    // Abrir Outlook
+    window.open(mailtoLink, "_blank")
 
-    // Convertir blob a file
-    const file = new File([fileBlob], fileName, { type: fileBlob.type })
-    const dataTransfer = new DataTransfer()
-    dataTransfer.items.add(file)
-    fileInput.files = dataTransfer.files
+    // También descargar el archivo
+    downloadFile(mercado)
 
-    form.appendChild(fileInput)
-    document.body.appendChild(form)
+    toast({
+      title: "Email abierto y archivo descargado",
+      description: `Se abrió Outlook con CC a operaciones@ad-cap.com.ar y se descargó ${getFileName(mercado)}. Adjunte manualmente el archivo descargado.`,
+    })
 
-    // Abrir Outlook con el archivo adjunto
-    const mailtoLink = `mailto:${to}?subject=${subject}&body=${body}&attachment=${fileName}`
-
-    // Intentar abrir con el archivo adjunto
-    try {
-      // Crear un enlace temporal que incluya el archivo
-      const tempLink = document.createElement("a")
-      tempLink.href = fileUrl
-      tempLink.download = fileName
-      tempLink.style.display = "none"
-      document.body.appendChild(tempLink)
-
-      // Descargar el archivo primero
-      tempLink.click()
-
-      // Luego abrir el email
-      setTimeout(() => {
-        window.open(mailtoLink, "_blank")
-        document.body.removeChild(tempLink)
-        document.body.removeChild(form)
-
-        toast({
-          title: "Email y archivo preparados",
-          description: `Se descargó ${fileName} y se abrió Outlook. Adjunte manualmente el archivo descargado.`,
-        })
-      }, 500)
-    } catch (error) {
-      console.error("Error al preparar email:", error)
-
-      // Fallback: solo descargar archivo y abrir email
-      const downloadLink = document.createElement("a")
-      downloadLink.href = fileUrl
-      downloadLink.download = fileName
-      downloadLink.style.display = "none"
-      document.body.appendChild(downloadLink)
-      downloadLink.click()
-      document.body.removeChild(downloadLink)
-
-      window.open(mailtoLink, "_blank")
-
-      toast({
-        title: "Email abierto",
-        description: `Se descargó ${fileName}. Adjunte manualmente el archivo al email.`,
-        variant: "destructive",
-      })
-    }
-
-    // Limpiar URL después de un tiempo
-    setTimeout(() => {
-      URL.revokeObjectURL(fileUrl)
-    }, 2000)
+    // Delay de 1 segundo
+    await new Promise((resolve) => setTimeout(resolve, 1000))
   }
 
   const mercadosConDatos = Object.keys(excelFiles).filter((mercado) => operacionesSummary[mercado] > 0)
@@ -176,6 +154,16 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
             </Button>
           </div>
         </DialogHeader>
+
+        {/* Información importante sobre adjuntos */}
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Nota sobre adjuntos:</strong> Por seguridad, los navegadores no permiten adjuntar archivos
+            automáticamente a emails. Los archivos Excel se descargarán automáticamente y deberás adjuntarlos
+            manualmente en Outlook. Todos los emails incluyen CC a operaciones@ad-cap.com.ar.
+          </AlertDescription>
+        </Alert>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-3">
@@ -203,9 +191,9 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
                 <div className={`${config.bgColor} p-4 rounded-lg border`}>
                   <div className="flex items-center gap-2 mb-2">
                     <Paperclip className="w-4 h-4" />
-                    <span className="font-medium">Archivo Adjunto</span>
+                    <span className="font-medium">Archivo para Adjuntar</span>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 mb-3">
                     <Badge variant="outline" className="font-mono">
                       {fileName}
                     </Badge>
@@ -214,6 +202,10 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
                       {operacionesSummary[mercado]} operaciones
                     </Badge>
                   </div>
+                  <Button onClick={() => downloadFile(mercado)} size="sm" variant="outline" className="bg-white">
+                    <Download className="w-4 h-4 mr-2" />
+                    Descargar Archivo
+                  </Button>
                 </div>
 
                 {/* Campos del email */}
@@ -226,6 +218,17 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
                       onChange={(e) => updateEmailData(mercado, "destinatarios", e.target.value)}
                       className="font-mono text-sm"
                     />
+                  </div>
+
+                  <div>
+                    <Label htmlFor={`cc-${mercado}`}>CC:</Label>
+                    <Input
+                      id={`cc-${mercado}`}
+                      value="operaciones@ad-cap.com.ar"
+                      disabled
+                      className="font-mono text-sm bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">CC fijo incluido automáticamente</p>
                   </div>
 
                   <div>
@@ -272,15 +275,39 @@ export default function EmailPreviewModal({ isOpen, onClose, excelFiles, operaci
                 </div>
 
                 {/* Botones de acción */}
-                <div className="flex gap-3 pt-4">
-                  <Button onClick={() => openInOutlook(mercado)} className="flex-1 bg-blue-600 hover:bg-blue-700">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4">
+                  <Button onClick={() => openInOutlook(mercado)} className="bg-blue-600 hover:bg-blue-700">
                     <ExternalLink className="w-4 h-4 mr-2" />
                     Abrir en Outlook
                   </Button>
-                  <Button variant="outline" onClick={onClose}>
-                    Cancelar
+
+                  <Button onClick={() => copyEmailData(mercado)} variant="outline">
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copiar Email
+                  </Button>
+
+                  <Button onClick={() => downloadFile(mercado)} variant="outline">
+                    <Download className="w-4 h-4 mr-2" />
+                    Descargar Excel
                   </Button>
                 </div>
+
+                {/* Instrucciones */}
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Pasos para enviar:</strong>
+                    <ol className="list-decimal list-inside mt-1 text-sm space-y-1">
+                      <li>
+                        Haz clic en "Abrir en Outlook" (se abrirá el email con CC incluido y descargará el archivo)
+                      </li>
+                      <li>En Outlook, haz clic en "Adjuntar archivo" o el ícono 📎</li>
+                      <li>Selecciona el archivo {fileName} que se descargó</li>
+                      <li>Verifica que operaciones@ad-cap.com.ar esté en CC</li>
+                      <li>Envía el email</li>
+                    </ol>
+                  </AlertDescription>
+                </Alert>
               </TabsContent>
             )
           })}
