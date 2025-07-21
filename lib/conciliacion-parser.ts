@@ -1,66 +1,34 @@
 import * as XLSX from "xlsx"
-import type {
-  StatusOrdenPago,
-  ConfirmacionSolicitud,
-  SolicitudPago,
-  ReciboPago,
-  MovimientoBancario,
-  TransferenciaMonetaria,
-  MovimientoMercado,
-  ResultadoConciliacion,
-} from "./conciliacion-types"
-import { getCuitByComitente } from "./comitente-lookup"
+import type { ResultadoConciliacion, TipoConciliacion } from "./conciliacion-types"
 
-// Cache para CUITs ya buscados
-const cuitCache = new Map<string, string>()
-
-// Función para limpiar CUIT (eliminar guiones y formato científico)
-function limpiarCuit(cuit: string): string {
-  if (!cuit) return ""
-
-  let cuitLimpio = cuit.toString().replace(/[-\s]/g, "")
-
-  // Manejar formato científico (ej: 3.07E+10)
-  if (cuitLimpio.includes("E") || cuitLimpio.includes("e")) {
-    try {
-      const numero = Number.parseFloat(cuitLimpio)
-      if (!isNaN(numero)) {
-        cuitLimpio = Math.round(numero).toString()
-      }
-    } catch (error) {
-      console.warn(`Error convirtiendo CUIT científico: ${cuit}`)
-    }
-  }
-
-  // Asegurar que tenga 11 dígitos
-  if (cuitLimpio.length === 10) {
-    cuitLimpio = "0" + cuitLimpio
-  }
-
-  return cuitLimpio
+export interface ConciliacionRow {
+  [key: string]: string | number | boolean | null
 }
 
-// Función para convertir fecha de formato "Jul 27 2025 12:00AM" a "27/06/2025"
+// Función para limpiar CUIT (eliminar guiones y espacios)
+function limpiarCuit(cuit: string): string {
+  return String(cuit || "")
+    .replace(/[-\s]/g, "")
+    .trim()
+}
+
+// Función para convertir fecha de formato "Jul 27 2025 12:00AM" a "27/07/2025"
 function convertirFecha(fechaStr: string): string {
   if (!fechaStr) return ""
-
   try {
     // Si ya está en formato DD/MM/YYYY, devolverla tal como está
     if (fechaStr.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
       return fechaStr
     }
-
     // Manejar formato "Jul 1 2025 12:00AM" o "Jul  1 2025 12:00AM" (con doble espacio)
     if (typeof fechaStr === "string" && fechaStr.includes(" ")) {
       // Normalizar espacios múltiples a uno solo
       const fechaNormalizada = fechaStr.replace(/\s+/g, " ")
       const partes = fechaNormalizada.split(" ")
-
       if (partes.length >= 3) {
         const mesStr = partes[0]
         const dia = partes[1].padStart(2, "0") // Asegurar que el día tenga 2 dígitos
         const año = partes[2]
-
         // Mapear nombres de meses en inglés
         const meses: Record<string, string> = {
           Jan: "01",
@@ -76,530 +44,174 @@ function convertirFecha(fechaStr: string): string {
           Nov: "11",
           Dec: "12",
         }
-
         const mes = meses[mesStr]
         if (mes) {
           return `${dia}/${mes}/${año}`
         }
       }
     }
+    // Si es un número de Excel, convertir a fecha
+    if (typeof fechaStr === "number") {
+      const date = new Date((fechaStr - 25569) * 86400 * 1000)
+      return date.toLocaleDateString("es-AR")
+    }
+    return String(fechaStr)
+  } catch (error) {
+    console.error("Error convirtiendo fecha:", fechaStr, error)
+    return String(fechaStr)
+  }
+}
 
-    // Manejar número de serie de Excel (como 45835.69652777778)
-    if (typeof fechaStr === "number" || !isNaN(Number(fechaStr))) {
-      const numeroSerie = Number(fechaStr)
-      // Convertir número de serie de Excel a fecha (corregido para UTC)
-      const fecha = new Date(Date.UTC(1900, 0, numeroSerie - 1))
+// Función para normalizar fecha a formato DD/MM/YYYY
+function normalizarFecha(fechaStr: string): string {
+  if (!fechaStr) return ""
 
-      if (!isNaN(fecha.getTime())) {
-        const dia = fecha.getUTCDate().toString().padStart(2, "0")
-        const mes = (fecha.getUTCMonth() + 1).toString().padStart(2, "0")
-        const año = fecha.getUTCFullYear()
-        return `${dia}/${mes}/${año}`
-      }
+  try {
+    // Si ya está en formato correcto DD/MM/YYYY, devolverla tal como está
+    if (fechaStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+      return fechaStr
     }
 
-    // Intentar conversión estándar como último recurso
-    const fecha = new Date(fechaStr)
-    if (!isNaN(fecha.getTime())) {
-      const dia = fecha.getDate().toString().padStart(2, "0")
-      const mes = (fecha.getMonth() + 1).toString().padStart(2, "0")
-      const año = fecha.getFullYear()
+    // Si está en formato D/M/YYYY o DD/M/YYYY o D/MM/YYYY, normalizarla
+    const partes = fechaStr.split("/")
+    if (partes.length === 3) {
+      const dia = partes[0].padStart(2, "0")
+      const mes = partes[1].padStart(2, "0")
+      const año = partes[2]
       return `${dia}/${mes}/${año}`
     }
 
-    console.warn(`Fecha no válida: ${fechaStr}`)
-    return fechaStr.toString()
+    return fechaStr
   } catch (error) {
-    console.error(`Error convirtiendo fecha: ${fechaStr}`, error)
-    return fechaStr.toString()
+    console.error("Error normalizando fecha:", fechaStr, error)
+    return fechaStr
   }
 }
 
-// Función para extraer símbolo de moneda de texto como "Pesos / $", "Dolar MEP (Local) / USD D", "$", "USD D"
-function extraerSimboloMoneda(monedaStr: string): string {
-  if (!monedaStr) return "$" // Por defecto, pesos
+// Función para normalizar monedas - CORREGIDA según especificaciones
+function normalizarMoneda(monedaStr: string): string {
+  if (!monedaStr) return "$"
 
-  const monedaLimpia = monedaStr.toString().trim()
-  const monedaUpper = monedaLimpia.toUpperCase()
+  const monedaLimpia = String(monedaStr).trim()
 
-  console.log(`🔍 Extrayendo moneda de: "${monedaStr}" -> Upper: "${monedaUpper}"`)
-
-  // NUEVO: Si contiene "USD C", "CABLE" o "EXTERIOR", es USDC
-  if (monedaUpper.includes("USD C") || monedaUpper.includes("CABLE") || monedaUpper.includes("EXTERIOR")) {
-    console.log(`✅ Detectado USDC en: "${monedaStr}"`)
-    return "USDC"
+  // Mapeo exacto de monedas según especificaciones del usuario
+  const mapeoMonedas: Record<string, string> = {
+    "Dolar MEP (Local)": "USD",
+    "Dolar Cable (Exterior)": "USD C",
+    Pesos: "$",
+    "USD C": "USD C",
+    $: "$",
+    "USD D": "USD", // CORREGIDO: USD D se convierte a USD
+    USD: "USD",
+    ARS: "$", // ARS se convierte a $
   }
 
-  // Si contiene "USD" en cualquier parte, es USD
-  if (monedaUpper.includes("USD")) {
-    console.log(`✅ Detectado USD en: "${monedaStr}"`)
+  // Buscar coincidencia exacta primero
+  if (mapeoMonedas[monedaLimpia]) {
+    return mapeoMonedas[monedaLimpia]
+  }
+
+  // Buscar coincidencias parciales
+  for (const [clave, valor] of Object.entries(mapeoMonedas)) {
+    if (monedaLimpia.toLowerCase().includes(clave.toLowerCase())) {
+      return valor
+    }
+  }
+
+  // Si contiene "USD" o "Dolar", devolver USD
+  if (monedaLimpia.toLowerCase().includes("usd") || monedaLimpia.toLowerCase().includes("dolar")) {
     return "USD"
   }
 
-  // Si es exactamente "$", devolver "$"
-  if (monedaLimpia === "$") {
-    console.log(`✅ Detectado $ en: "${monedaStr}"`)
+  // Si contiene "Peso" o "$", devolver $
+  if (monedaLimpia.toLowerCase().includes("peso") || monedaLimpia.includes("$")) {
     return "$"
   }
 
-  // Buscar patrones específicos de dólar
-  if (monedaUpper.includes("DOLAR") || monedaUpper.includes("DÓLAR") || monedaUpper.includes("DOLLAR")) {
-    console.log(`✅ Detectado dólar por palabra clave en: "${monedaStr}"`)
-    return "USD"
-  }
-
-  // Si contiene "/", extraer la parte después del "/"
-  if (monedaStr.includes("/")) {
-    const partes = monedaStr.split("/")
-    const simbolo = partes[1].trim()
-    console.log(`🔍 Parte después de /: "${simbolo}"`)
-
-    if (simbolo === "$") {
-      return "$"
-    }
-    if (simbolo.toUpperCase().includes("USD")) {
-      return "USD"
-    }
-    return simbolo
-  }
-
-  // Si es "Pesos" o similar
-  if (monedaUpper.includes("PESO")) {
-    console.log(`✅ Detectado peso por palabra clave en: "${monedaStr}"`)
-    return "$"
-  }
-
-  console.log(`⚠️ No se pudo determinar moneda, usando $ por defecto para: "${monedaStr}"`)
-  return "$" // Por defecto, pesos
+  // Por defecto, devolver la moneda original o $
+  return monedaLimpia || "$"
 }
 
-// Función para convertir importe de texto a número - MEJORADA para manejar "US$ 1,010,342.68"
+// Función para buscar columna por nombres posibles
+function buscarColumna(headers: string[], nombres: string[]): number {
+  for (let i = 0; i < headers.length; i++) {
+    const header = headers[i]?.toString().toLowerCase() || ""
+    if (nombres.some((nombre) => header.includes(nombre.toLowerCase()))) {
+      return i
+    }
+  }
+  return -1
+}
+
+// Función para convertir importe
 function convertirImporte(importeStr: string): number {
   if (!importeStr) return 0
 
-  // Convertir a string si no lo es
-  let limpio = importeStr.toString().trim()
-
-  // Si está vacío después del trim, devolver 0
-  if (!limpio) return 0
-
-  console.log(`🔍 Convirtiendo importe: "${importeStr}"`)
-
-  // Detectar si es negativo
-  const esNegativo = limpio.startsWith("-")
-
-  // Remover símbolos de moneda específicos: US$, $, USD, etc.
-  limpio = limpio.replace(/^-?US\$\s*/, "") // Remover "US$" al inicio
-  limpio = limpio.replace(/^-?\$\s*/, "") // Remover "$" al inicio
-  limpio = limpio.replace(/USD\s*/gi, "") // Remover "USD" en cualquier parte
-  limpio = limpio.replace(/^-/, "") // Remover signo negativo temporal
-
-  // Remover espacios adicionales
-  limpio = limpio.trim()
-
-  console.log(`🔍 Después de limpiar símbolos: "${limpio}"`)
-
-  // Si después de limpiar está vacío, devolver 0
-  if (!limpio) return 0
-
-  // Manejar formato científico (ej: 1.23E+5)
-  if (limpio.includes("E") || limpio.includes("e")) {
-    try {
-      const numero = Number.parseFloat(limpio)
-      if (!isNaN(numero)) {
-        const resultado = esNegativo ? -numero : numero
-        console.log(`✅ Formato científico convertido: ${resultado}`)
-        return resultado
-      }
-    } catch (error) {
-      console.warn(`Error convirtiendo importe científico: ${importeStr}`)
-      return 0
-    }
+  // Si es un número, devolverlo directamente
+  if (typeof importeStr === "number") {
+    return importeStr
   }
 
-  // Manejar formato con comas como separadores de miles (ej: 1,010,342.68)
-  // Si hay comas Y puntos, las comas son separadores de miles
-  if (limpio.includes(",") && limpio.includes(".")) {
-    // Verificar que el punto esté después de la última coma (formato americano)
-    const ultimaComa = limpio.lastIndexOf(",")
-    const ultimoPunto = limpio.lastIndexOf(".")
+  // Convertir a string y limpiar formato de moneda
+  const importeLimpio = String(importeStr)
+    .replace(/^\$\s*/, "") // Remover $ al inicio
+    .replace(/^US\$\s*/, "") // Remover US$ al inicio
+    .replace(/[^\d.,-]/g, "") // Remover todo excepto dígitos, puntos, comas y guiones
+    .replace(/,/g, "") // Remover todas las comas (separadores de miles)
 
-    if (ultimoPunto > ultimaComa) {
-      // Formato americano: 1,010,342.68
-      limpio = limpio.replace(/,/g, "") // Remover todas las comas
-      console.log(`🔍 Formato americano detectado, después de remover comas: "${limpio}"`)
-    }
-  } else if (limpio.includes(",") && !limpio.includes(".")) {
-    // Solo comas, podría ser separador decimal europeo o separador de miles
-    const comas = (limpio.match(/,/g) || []).length
-    if (comas === 1) {
-      // Una sola coma, probablemente decimal europeo
-      const partes = limpio.split(",")
-      if (partes[1].length <= 2) {
-        // Decimal europeo (ej: 1234,56)
-        limpio = limpio.replace(",", ".")
-        console.log(`🔍 Formato europeo detectado: "${limpio}"`)
-      } else {
-        // Separador de miles (ej: 1,234)
-        limpio = limpio.replace(",", "")
-        console.log(`🔍 Separador de miles detectado: "${limpio}"`)
-      }
-    } else {
-      // Múltiples comas, separadores de miles
-      limpio = limpio.replace(/,/g, "")
-      console.log(`🔍 Múltiples separadores de miles: "${limpio}"`)
-    }
-  }
-
-  const numero = Number.parseFloat(limpio)
-
-  if (isNaN(numero)) {
-    console.warn(`⚠️ No se pudo convertir importe: "${importeStr}" -> "${limpio}"`)
-    return 0
-  }
-
-  const resultado = esNegativo ? -numero : numero
-  console.log(`✅ Importe convertido: "${importeStr}" -> ${resultado}`)
-  return resultado
+  return Number.parseFloat(importeLimpio) || 0
 }
 
 // Función para extraer CUIT del beneficiario
 function extraerCuitBeneficiario(beneficiario: string): string {
   if (!beneficiario) return ""
 
-  // Buscar patrón "- XXXXXXXXXX" al final
-  const match = beneficiario.match(/- (\d{11})/)
-  return match ? match[1] : ""
+  // Buscar patrón de CUIT en el beneficiario
+  const cuitMatch = beneficiario.match(/(\d{11}|\d{2}-\d{8}-\d{1})/)
+  if (cuitMatch) {
+    return limpiarCuit(cuitMatch[0])
+  }
+
+  return ""
+}
+
+// Función para verificar si es impuesto (solo guiones)
+function esImpuesto(beneficiario: string): boolean {
+  return /^-+$/.test(beneficiario.trim())
+}
+
+// Función para verificar si es CUIT de transferencias monetarias - CORREGIDA versión 120
+function esCuitTransferencia(cuit: string): boolean {
+  return cuit === "30711610126"
+}
+
+// Función para verificar si es CUIT de mercado - CORREGIDA versión 120
+function esCuitMercado(cuit: string): boolean {
+  const cuitsMercado = ["30529177875", "30500001000", "30600000000"]
+  return cuitsMercado.includes(cuit)
+}
+
+// Función para verificar si es beneficiario de mercado
+function esBeneficiarioMercado(beneficiario: string): boolean {
+  const palabrasMercado = ["MATBA", "ROFEX", "BYMA", "MAV", "MAE", "DEP. 97 - 30711610126"]
+  const beneficiarioUpper = beneficiario.toUpperCase()
+  return palabrasMercado.some((palabra) => beneficiarioUpper.includes(palabra))
 }
 
 // Función para inferir moneda del nombre del archivo
-function inferirMoneda(nombreArchivo: string): string {
-  const nombre = nombreArchivo.toLowerCase()
-  if (nombre.includes("usd") || nombre.includes("dolar")) {
+function inferirMoneda(fileName: string): string {
+  const fileNameUpper = fileName.toUpperCase()
+  if (fileNameUpper.includes("USD") || fileNameUpper.includes("DOLAR")) {
     return "USD"
   }
-  return "$" // Pesos por defecto
+  return "$"
 }
 
-// Función para detectar mercado en texto
-function detectarMercado(texto: string): string {
-  if (!texto) return ""
-
-  const textoUpper = texto.toUpperCase()
-
-  if (textoUpper.includes("BYMA")) return "BYMA"
-  if (textoUpper.includes("MAV") || textoUpper.includes("MERCADO ARGENTINO DE VALORES")) return "MAV"
-  if (textoUpper.includes("MAE")) return "MAE"
-  if (textoUpper.includes("MATBA") || textoUpper.includes("ROFEX")) return "MATBA ROFEX"
-
-  return ""
-}
-
-// Función para buscar índice de columna por nombre
-function buscarColumna(headers: string[], nombres: string[]): number {
-  for (let i = 0; i < headers.length; i++) {
-    const header = headers[i]?.toString().toLowerCase() || ""
-    for (const nombre of nombres) {
-      if (header.includes(nombre.toLowerCase())) {
-        return i
-      }
-    }
-  }
-  return -1
-}
-
-// Función para verificar si un beneficiario es de mercados - ACTUALIZADA
-function esBeneficiarioMercado(beneficiario: string): boolean {
-  const beneficiarioUpper = beneficiario.toUpperCase()
-
-  const patronesMercados = [
-    "MATBA ROFEX SA/A3 MERCADO SA",
-    "S.A. BOLSAS Y MERCADOS AR",
-    "BYMA S.A. BOLSAS Y MERCADOS AR",
-    "MERCADO ARGENTINO DE VALORES",
-    "MAE",
-  ]
-
-  return patronesMercados.some((patron) => beneficiarioUpper.includes(patron))
-}
-
-// Función para verificar si un CUIT es de mercados - NUEVA
-function esCuitMercado(cuit: string): boolean {
-  const cuitsMercados = [
-    "30711610126", // CUIT original de mercados
-    "30529177875", // NUEVO CUIT agregado por el usuario
-  ]
-
-  return cuitsMercados.includes(cuit)
-}
-
-// Función para verificar si un beneficiario es un impuesto (solo contiene guiones)
-function esImpuesto(beneficiario: string): boolean {
-  if (!beneficiario) return false
-
-  // Verificar si solo contiene guiones o espacios
-  return /^[-\s]+$/.test(beneficiario)
-}
-
-// Función optimizada para buscar CUIT con cache y lotes
-async function buscarCuitOptimizado(
-  comitenteNumero: string,
-  onProgress?: (current: number, total: number, message: string) => void,
-): Promise<string> {
-  // Verificar cache primero
-  if (cuitCache.has(comitenteNumero)) {
-    return cuitCache.get(comitenteNumero) || ""
-  }
-
-  try {
-    const cuitEncontrado = await getCuitByComitente(comitenteNumero)
-    if (cuitEncontrado) {
-      cuitCache.set(comitenteNumero, cuitEncontrado)
-      return cuitEncontrado
-    }
-  } catch (error) {
-    console.warn(`⚠️ Error buscando CUIT para comitente ${comitenteNumero}:`, error)
-  }
-
-  return ""
-}
-
-// Función para procesar CUITs en lotes con delay
-async function procesarCuitsEnLotes<T extends { comitenteNumero: string; cuit: string }>(
-  registros: T[],
-  onProgress?: (current: number, total: number, message: string) => void,
-): Promise<void> {
-  const registrosSinCuit = registros.filter((r) => !r.cuit && r.comitenteNumero)
-
-  if (registrosSinCuit.length === 0) return
-
-  console.log(`🔍 Buscando CUITs para ${registrosSinCuit.length} registros...`)
-
-  const LOTE_SIZE = 10 // Procesar de a 10 registros
-  const DELAY_MS = 100 // Delay entre lotes para no saturar
-
-  for (let i = 0; i < registrosSinCuit.length; i += LOTE_SIZE) {
-    const lote = registrosSinCuit.slice(i, i + LOTE_SIZE)
-
-    // Procesar lote en paralelo
-    const promesas = lote.map(async (registro, index) => {
-      const globalIndex = i + index + 1
-
-      if (onProgress) {
-        onProgress(globalIndex, registrosSinCuit.length, `Buscando CUIT para comitente ${registro.comitenteNumero}`)
-      }
-
-      const cuitEncontrado = await buscarCuitOptimizado(registro.comitenteNumero)
-      if (cuitEncontrado) {
-        registro.cuit = cuitEncontrado
-        console.log(`✅ CUIT encontrado para comitente ${registro.comitenteNumero}: ${cuitEncontrado}`)
-      }
-    })
-
-    await Promise.all(promesas)
-
-    // Delay entre lotes para no saturar el sistema
-    if (i + LOTE_SIZE < registrosSinCuit.length) {
-      await new Promise((resolve) => setTimeout(resolve, DELAY_MS))
-    }
-  }
-}
-
-// Función para detectar si hay headers en la primera fila
-function tieneHeaders(primeraFila: any[]): boolean {
-  if (!primeraFila || primeraFila.length === 0) return false
-
-  // Buscar palabras clave típicas de headers
-  const palabrasClave = [
-    "fecha",
-    "comitente",
-    "cliente",
-    "cuit",
-    "cuil",
-    "especie",
-    "plazo",
-    "moneda",
-    "importe",
-    "beneficiario",
-    "estado",
-    "mercado",
-    "denominacion",
-    "anulado",
-    "titular",
-    "símbolo",
-    "simbolo",
-  ]
-
-  const textoFila = primeraFila.join(" ").toLowerCase()
-  return palabrasClave.some((palabra) => textoFila.includes(palabra))
-}
-
-// Parser para Status Órdenes de Pago
+// Función para parsear Status Órdenes de Pago - ACTUALIZADA con normalización corregida
 export async function parseStatusOrdenesPago(
   file: File,
-  onProgress?: (current: number, total: number, message: string) => void,
-): Promise<StatusOrdenPago[]> {
-  return new Promise(async (resolve, reject) => {
-    const reader = new FileReader()
-
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer)
-        const workbook = XLSX.read(data, { type: "array" })
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][]
-
-        const resultados: StatusOrdenPago[] = []
-
-        // Detectar si hay headers
-        const hayHeaders = tieneHeaders(jsonData[0])
-        const headerRow = hayHeaders ? 0 : -1
-        const dataStartRow = hayHeaders ? 1 : 0
-
-        console.log(`📋 Headers detectados: ${hayHeaders ? "SÍ" : "NO"}`)
-
-        let headers: string[] = []
-        let colFecha = -1,
-          colComitenteNum = -1,
-          colComitenteDesc = -1
-        let colMoneda = -1,
-          colImporte = -1,
-          colCuit = -1,
-          colEstado = -1
-        let colEspecie = -1,
-          colPlazo = -1,
-          colMercado = -1
-
-        if (hayHeaders) {
-          headers = jsonData[headerRow] || []
-          console.log("Headers Status Órdenes:", headers)
-
-          // Buscar índices de columnas
-          colFecha = buscarColumna(headers, ["fecha de concertación", "fecha concertación", "fecha"])
-          colComitenteNum = buscarColumna(headers, [
-            "comitente (número)",
-            "comitente numero",
-            "numero comitente",
-            "cliente",
-          ])
-          colComitenteDesc = buscarColumna(headers, [
-            "comitente (descripción)",
-            "comitente descripcion",
-            "descripcion",
-            "denominacion",
-          ])
-          colMoneda = buscarColumna(headers, ["moneda"])
-          colImporte = buscarColumna(headers, ["importe"])
-          colCuit = buscarColumna(headers, ["cuit / cuil", "cuit/cuil", "cuit", "cuil"])
-          colEstado = buscarColumna(headers, ["estado"])
-          colEspecie = buscarColumna(headers, ["especie"])
-          colPlazo = buscarColumna(headers, ["plazo"])
-          colMercado = buscarColumna(headers, ["mercado"])
-        } else {
-          // Orden estándar sin headers: Cliente, CUIT, Especie, Plazo, Moneda, etc.
-          colComitenteNum = 0
-          colCuit = 1
-          colEspecie = 2
-          colPlazo = 3
-          colMoneda = 4
-          colImporte = 5
-          colFecha = 6
-          colEstado = 7
-          colMercado = 8
-          colComitenteDesc = 9
-        }
-
-        console.log("Índices Status Órdenes:", {
-          colFecha,
-          colComitenteNum,
-          colComitenteDesc,
-          colMoneda,
-          colImporte,
-          colCuit,
-          colEstado,
-          colEspecie,
-          colPlazo,
-          colMercado,
-        })
-
-        // Primera pasada: procesar todos los registros
-        for (let i = dataStartRow; i < jsonData.length; i++) {
-          const row = jsonData[i]
-          if (!row || row.length === 0) continue
-
-          try {
-            // Crear objeto con datos originales
-            const datosOriginales: Record<string, any> = {}
-            if (hayHeaders) {
-              headers.forEach((header, index) => {
-                if (header && row[index] !== undefined) {
-                  datosOriginales[header] = row[index]
-                }
-              })
-            } else {
-              // Sin headers, usar índices
-              row.forEach((valor, index) => {
-                datosOriginales[`Columna_${index}`] = valor
-              })
-            }
-
-            // Detectar mercado si no hay columna específica
-            let mercado = colMercado >= 0 ? row[colMercado]?.toString() || "" : ""
-            if (!mercado) {
-              // Buscar en especie o descripción
-              const especie = colEspecie >= 0 ? row[colEspecie]?.toString() || "" : ""
-              const descripcion = colComitenteDesc >= 0 ? row[colComitenteDesc]?.toString() || "" : ""
-              mercado = detectarMercado(especie) || detectarMercado(descripcion)
-            }
-
-            // Extraer y convertir moneda
-            const monedaTexto = colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$"
-            const moneda = extraerSimboloMoneda(monedaTexto)
-
-            const statusOrden: StatusOrdenPago = {
-              fechaConcertacion: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
-              comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
-              comitenteDescripcion: colComitenteDesc >= 0 ? row[colComitenteDesc]?.toString() || "" : "",
-              moneda: moneda,
-              importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
-              cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
-              estado: colEstado >= 0 ? row[colEstado]?.toString() || "PENDIENTE" : "PENDIENTE",
-              especie: colEspecie >= 0 ? row[colEspecie]?.toString() || "" : "",
-              plazo: colPlazo >= 0 ? row[colPlazo]?.toString() || "" : "",
-              mercado: mercado,
-              datosOriginales,
-            }
-
-            if (statusOrden.comitenteNumero || statusOrden.cuit) {
-              resultados.push(statusOrden)
-            }
-          } catch (error) {
-            console.error(`Error procesando fila ${i} de Status Órdenes:`, error)
-          }
-        }
-
-        // Segunda pasada: buscar CUITs faltantes SOLO para registros sin CUIT
-        const registrosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
-        if (registrosSinCuit.length > 0) {
-          console.log(`🔍 Buscando CUITs para ${registrosSinCuit.length} registros sin CUIT...`)
-          await procesarCuitsEnLotes(registrosSinCuit, onProgress)
-        }
-
-        console.log(`✅ Status Órdenes de Pago procesadas: ${resultados.length}`)
-        resolve(resultados)
-      } catch (error) {
-        reject(error)
-      }
-    }
-
-    reader.onerror = () => reject(new Error("Error leyendo archivo"))
-    reader.readAsArrayBuffer(file)
-  })
-}
-
-// Parser para Confirmación de Solicitudes
-export async function parseConfirmacionSolicitudes(file: File): Promise<ConfirmacionSolicitud[]> {
+  updateProgress?: (current: number, total: number, message: string) => void,
+): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
 
@@ -607,347 +219,335 @@ export async function parseConfirmacionSolicitudes(file: File): Promise<Confirma
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: "array" })
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+        const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][]
+        console.log("📊 Status Órdenes - Datos parseados:", jsonData.length)
 
-        const resultados: ConfirmacionSolicitud[] = []
+        const processedData = jsonData.map((row: any, index) => {
+          if (updateProgress) {
+            updateProgress(index + 1, jsonData.length, `Procesando Status ${index + 1}/${jsonData.length}`)
+          }
 
-        // Detectar si hay headers
-        const hayHeaders = tieneHeaders(jsonData[0])
-        const headerRow = hayHeaders ? 0 : -1
-        const dataStartRow = hayHeaders ? 1 : 0
+          // Extraer CUIT del campo "Comitente (CUIT)"
+          const cuitRaw = row["Comitente (CUIT)"] || ""
+          const cuit = limpiarCuit(cuitRaw)
 
-        console.log(`📋 Headers detectados en Confirmación: ${hayHeaders ? "SÍ" : "NO"}`)
+          // Detectar CCE en la denominación
+          const descripcion = row["Comitente (Denominación)"] || ""
+          const esCce = descripcion.includes("(CCE)")
 
-        let headers: string[] = []
-        let colFecha = -1,
-          colEstado = -1,
-          colComitenteNum = -1
-        let colComitenteDenom = -1,
-          colMonedaDesc = -1,
-          colImporte = -1,
-          colCuit = -1
+          // Convertir fecha usando la función específica
+          const fechaRaw = row["Fecha"] || ""
+          const fecha = convertirFecha(fechaRaw)
+          const fechaNormalizada = normalizarFecha(fecha)
 
-        if (hayHeaders) {
-          headers = jsonData[headerRow] || []
-          console.log("Headers Confirmación:", headers)
+          // CORREGIDO: Normalizar moneda usando la función actualizada
+          const monedaRaw = row["Moneda (Descripción)"] || row["Moneda"] || "$"
+          const monedaNormalizada = normalizarMoneda(monedaRaw)
 
-          // Buscar índices de columnas
-          colFecha = buscarColumna(headers, ["fecha"])
-          colEstado = buscarColumna(headers, ["estado"])
-          colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero", "cliente"])
-          colComitenteDenom = buscarColumna(headers, [
-            "comitente (denominación)",
-            "comitente denominacion",
-            "denominacion",
-          ])
-          colMonedaDesc = buscarColumna(headers, ["moneda (descripción)", "moneda descripcion", "moneda"])
-          colImporte = buscarColumna(headers, ["importe"])
-          // NUEVA: Buscar columna CUIT en Confirmación de Solicitudes
-          colCuit = buscarColumna(headers, ["cuit / cuil", "cuit/cuil", "cuit", "cuil"])
-        } else {
-          // Orden estándar sin headers
-          colFecha = 0
-          colEstado = 1
-          colComitenteNum = 2
-          colComitenteDenom = 3
-          colMonedaDesc = 4
-          colImporte = 5
-          colCuit = 6 // Agregar CUIT en posición 6
-        }
+          // Debug para verificar normalización
+          if (monedaRaw !== monedaNormalizada) {
+            console.log(`💱 Status - Moneda normalizada: "${monedaRaw}" -> "${monedaNormalizada}"`)
+          }
 
-        console.log("Índices Confirmación:", {
-          colFecha,
-          colEstado,
-          colComitenteNum,
-          colComitenteDenom,
-          colMonedaDesc,
-          colImporte,
-          colCuit,
+          return {
+            ...row,
+            id: `status-${Date.now()}-${index}`,
+            origen: "status",
+            CUIT: cuit, // Campo normalizado
+            Fecha: fechaNormalizada, // Campo normalizado
+            Moneda: monedaNormalizada, // Campo normalizado CORREGIDO
+            esCce,
+            datosOriginales: { ...row },
+          }
         })
 
-        for (let i = dataStartRow; i < jsonData.length; i++) {
-          const row = jsonData[i]
-          if (!row || row.length === 0) continue
-
-          try {
-            // Crear objeto con datos originales
-            const datosOriginales: Record<string, any> = {}
-            if (hayHeaders) {
-              headers.forEach((header, index) => {
-                if (header && row[index] !== undefined) {
-                  datosOriginales[header] = row[index]
-                }
-              })
-            } else {
-              row.forEach((valor, index) => {
-                datosOriginales[`Columna_${index}`] = valor
-              })
-            }
-
-            // Extraer y convertir moneda
-            const monedaTexto = colMonedaDesc >= 0 ? row[colMonedaDesc]?.toString() || "$" : "$"
-            const moneda = extraerSimboloMoneda(monedaTexto)
-
-            const confirmacion: ConfirmacionSolicitud = {
-              fecha: convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : ""),
-              estado: colEstado >= 0 ? row[colEstado]?.toString() || "PENDIENTE" : "PENDIENTE",
-              comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
-              comitenteDenominacion: colComitenteDenom >= 0 ? row[colComitenteDenom]?.toString() || "" : "",
-              monedaDescripcion: moneda,
-              importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
-              // NUEVA: Leer y limpiar CUIT de Confirmación de Solicitudes
-              cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
-              datosOriginales,
-            }
-
-            if (confirmacion.comitenteNumero) {
-              resultados.push(confirmacion)
-            }
-          } catch (error) {
-            console.error(`Error procesando fila ${i} de Confirmación:`, error)
-          }
-        }
-
-        console.log(`✅ Confirmación de Solicitudes procesadas: ${resultados.length}`)
-        resolve(resultados)
+        resolve(processedData)
       } catch (error) {
+        console.error("❌ Error parseando Status:", error)
         reject(error)
       }
     }
 
-    reader.onerror = () => reject(new Error("Error leyendo archivo"))
+    reader.onerror = () => reject(new Error("Error leyendo archivo Status"))
     reader.readAsArrayBuffer(file)
   })
 }
 
-// Parser para Recibos de Pago
-export async function parseRecibosPago(
-  file: File,
-  onProgress?: (current: number, total: number, message: string) => void,
-): Promise<ReciboPago[]> {
-  return new Promise(async (resolve, reject) => {
+// Función para parsear Confirmación de Solicitudes - ACTUALIZADA con normalización corregida
+export async function parseConfirmacionSolicitudes(file: File): Promise<any[]> {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader()
 
-    reader.onload = async (e) => {
+    reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: "array" })
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+        const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][]
+        console.log("📊 Confirmación - Datos parseados:", jsonData.length)
 
-        const resultados: ReciboPago[] = []
+        const processedData = jsonData.map((row: any, index) => {
+          // Extraer CUIT del campo "CUIT"
+          const cuitRaw = row["CUIT"] || ""
+          const cuit = limpiarCuit(cuitRaw)
 
-        // Detectar si hay headers
-        const hayHeaders = tieneHeaders(jsonData[0])
-        const headerRow = hayHeaders ? 0 : -1
-        const dataStartRow = hayHeaders ? 1 : 0
+          // Detectar CCE en la descripción
+          const descripcion = row["Comitente (Descripción)"] || ""
+          const esCce = descripcion.includes("(CCE)")
 
-        console.log(`📋 Headers detectados en Recibos: ${hayHeaders ? "SÍ" : "NO"}`)
+          // Convertir fecha si existe - CORREGIDO para manejar números de Excel
+          let fecha = ""
+          const fechaRaw = row["Fecha"] || row["Fecha de Concertación"] || ""
+          if (fechaRaw) {
+            if (typeof fechaRaw === "number") {
+              // Si es un número de Excel (como 45855.82430555556), convertir a fecha
+              const date = new Date((fechaRaw - 25569) * 86400 * 1000)
+              // Ajustar zona horaria para evitar desfase
+              date.setMinutes(date.getMinutes() + date.getTimezoneOffset())
+              fecha = date.toLocaleDateString("es-AR")
+            } else if (typeof fechaRaw === "string" && fechaRaw.includes(" ")) {
+              // Extraer solo la parte de la fecha (antes del espacio)
+              fecha = fechaRaw.split(" ")[0]
+            } else {
+              fecha = convertirFecha(String(fechaRaw))
+            }
+          }
 
-        let headers: string[] = []
-        let colFechaLiq = -1,
-          colComitenteDenom = -1,
-          colComitenteNum = -1
-        let colImporte = -1,
-          colCuit = -1,
-          colMoneda = -1,
-          colAnulado = -1
+          fecha = normalizarFecha(fecha)
 
-        if (hayHeaders) {
-          headers = jsonData[headerRow] || []
-          console.log("Headers Recibos:", headers)
+          // CORREGIDO: Normalizar moneda usando la función actualizada
+          const monedaRaw = row["Moneda Descripción"] || row["Moneda"] || "$"
+          const monedaNormalizada = normalizarMoneda(monedaRaw)
 
-          // Buscar índices de columnas
-          colFechaLiq = buscarColumna(headers, ["fecha de liquidación", "fecha liquidacion", "fecha"])
-          colComitenteDenom = buscarColumna(headers, [
-            "comitente (denominación)",
-            "comitente denominacion",
-            "denominacion",
-          ])
-          colComitenteNum = buscarColumna(headers, ["comitente (número)", "comitente numero", "numero", "cliente"])
-          colImporte = buscarColumna(headers, ["importe"])
-          colCuit = buscarColumna(headers, ["cuit/cuil titular", "cuit", "cuil"])
-          // CORREGIDA: Buscar columna de moneda específica "Moneda (Símbolo)"
-          colMoneda = buscarColumna(headers, [
-            "moneda (símbolo)",
-            "moneda símbolo",
-            "moneda (simbolo)",
-            "moneda simbolo",
-            "titular moneda (símbolo)",
-            "titular moneda símbolo",
-            "moneda",
-          ])
-          // NUEVA: Buscar columna "esta anulado"
-          colAnulado = buscarColumna(headers, ["esta anulado", "anulado"])
-        } else {
-          // Orden estándar sin headers
-          colFechaLiq = 0
-          colComitenteDenom = 1
-          colComitenteNum = 2
-          colImporte = 3
-          colCuit = 4
-          colMoneda = 5
-          colAnulado = 6
-        }
+          // Debug para verificar normalización
+          if (monedaRaw !== monedaNormalizada) {
+            console.log(`💱 Confirmación - Moneda normalizada: "${monedaRaw}" -> "${monedaNormalizada}"`)
+          }
 
-        console.log("Índices Recibos:", {
-          colFechaLiq,
-          colComitenteDenom,
-          colComitenteNum,
-          colImporte,
-          colCuit,
-          colMoneda,
-          colAnulado,
+          return {
+            ...row,
+            id: `confirmacion-${Date.now()}-${index}`,
+            origen: "confirmacion",
+            CUIT: cuit, // Campo normalizado
+            esCce,
+            Fecha: fecha, // Campo normalizado
+            Moneda: monedaNormalizada, // Campo normalizado CORREGIDO
+            datosOriginales: { ...row },
+          }
         })
 
-        // Primera pasada: procesar todos los registros
-        for (let i = dataStartRow; i < jsonData.length; i++) {
-          const row = jsonData[i]
-          if (!row || row.length === 0) continue
-
-          try {
-            // NUEVO: Filtrar registros anulados
-            if (colAnulado >= 0) {
-              const estaAnulado = row[colAnulado]?.toString() || "0"
-              // Si "esta anulado" es diferente de 0, saltar este registro
-              if (estaAnulado !== "0" && estaAnulado.toLowerCase() !== "false") {
-                console.log(`⚠️ Saltando recibo anulado en fila ${i + 1}`)
-                continue
-              }
-            }
-
-            // Crear objeto con datos originales
-            const datosOriginales: Record<string, any> = {}
-            if (hayHeaders) {
-              headers.forEach((header, index) => {
-                if (header && row[index] !== undefined) {
-                  datosOriginales[header] = row[index]
-                }
-              })
-            } else {
-              row.forEach((valor, index) => {
-                datosOriginales[`Columna_${index}`] = valor
-              })
-            }
-
-            // Extraer y convertir moneda desde la columna específica
-            const monedaTexto = colMoneda >= 0 ? row[colMoneda]?.toString() || "$" : "$"
-            const moneda = extraerSimboloMoneda(monedaTexto)
-
-            console.log(`📋 Fila ${i + 1}: Moneda original: "${monedaTexto}" -> Convertida: "${moneda}"`)
-
-            const recibo: ReciboPago = {
-              id: `recibo-${Date.now()}-${i}`,
-              fechaLiquidacion: convertirFecha(colFechaLiq >= 0 ? row[colFechaLiq]?.toString() || "" : ""),
-              comitenteDenominacion: colComitenteDenom >= 0 ? row[colComitenteDenom]?.toString() || "" : "",
-              comitenteNumero: colComitenteNum >= 0 ? row[colComitenteNum]?.toString() || "" : "",
-              importe: convertirImporte(colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"),
-              cuit: limpiarCuit(colCuit >= 0 ? row[colCuit]?.toString() || "" : ""),
-              moneda: moneda, // Usar la moneda extraída
-              conciliadoSolicitudes: false,
-              conciliadoMovimientos: false,
-              // NUEVOS: Inicializar campos de conciliación por importe
-              conciliadoSolicitudesPorImporte: false,
-              conciliadoMovimientosPorImporte: false,
-              tipoConciliacion: "no-conciliado",
-              datosOriginales,
-            }
-
-            if (recibo.comitenteNumero || recibo.cuit) {
-              resultados.push(recibo)
-            }
-          } catch (error) {
-            console.error(`Error procesando fila ${i} de Recibos:`, error)
-          }
-        }
-
-        // Segunda pasada: buscar CUITs faltantes SOLO para registros sin CUIT
-        const recibosSinCuit = resultados.filter((r) => !r.cuit && r.comitenteNumero)
-        if (recibosSinCuit.length > 0) {
-          console.log(`🔍 Buscando CUITs para ${recibosSinCuit.length} recibos sin CUIT...`)
-          await procesarCuitsEnLotes(recibosSinCuit, onProgress)
-        }
-
-        console.log(`✅ Recibos de Pago procesados: ${resultados.length}`)
-        resolve(resultados)
+        resolve(processedData)
       } catch (error) {
+        console.error("❌ Error parseando Confirmación:", error)
         reject(error)
       }
     }
 
-    reader.onerror = () => reject(new Error("Error leyendo archivo"))
+    reader.onerror = () => reject(new Error("Error leyendo archivo Confirmación"))
     reader.readAsArrayBuffer(file)
   })
 }
 
-// Parser para Movimientos Bancarios - ACTUALIZADO
-export async function parseMovimientosBancarios(file: File): Promise<{
-  movimientos: MovimientoBancario[]
-  transferencias: TransferenciaMonetaria[]
-  mercados: MovimientoMercado[]
+// Función para parsear Comprobantes de Pago
+export async function parseRecibosPago(
+  file: File,
+  updateProgress?: (current: number, total: number, message: string) => void,
+): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: "array" })
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+        const jsonData = XLSX.utils.sheet_to_json(worksheet)
+
+        console.log("📊 Comprobantes - Datos parseados:", jsonData.length)
+
+        const processedData = jsonData.map((row: any, index) => {
+          if (updateProgress) {
+            updateProgress(index + 1, jsonData.length, `Procesando Comprobante ${index + 1}/${jsonData.length}`)
+          }
+
+          // Extraer CUIT del campo "CUIT/CUIL titular de la cuenta" y limpiar guiones
+          const cuitRaw = row["CUIT/CUIL titular de la cuenta"] || ""
+          const cuit = limpiarCuit(cuitRaw)
+
+          // Detectar CCE en la denominación
+          const descripcion = row["Comitente (Denominación)"] || ""
+          const esCce = descripcion.includes("(CCE)")
+
+          // Parsear fecha correctamente - CORREGIDO para no restar un día
+          let fechaLiquidacion = ""
+          const fechaRaw = row["Fecha Liquidación"] || row["Fecha de Liquidación"] || ""
+          if (fechaRaw) {
+            if (typeof fechaRaw === "number") {
+              // Si es un número de Excel, convertir a fecha SIN restar día
+              const date = new Date((fechaRaw - 25569) * 86400 * 1000)
+              // Ajustar zona horaria para evitar desfase
+              date.setMinutes(date.getMinutes() + date.getTimezoneOffset())
+              fechaLiquidacion = date.toLocaleDateString("es-AR")
+            } else {
+              fechaLiquidacion = convertirFecha(String(fechaRaw))
+            }
+          }
+
+          fechaLiquidacion = normalizarFecha(fechaLiquidacion)
+
+          // Normalizar moneda usando la función actualizada
+          const monedaRaw = row["Moneda (Símbolo)"] || "$"
+          const monedaNormalizada = normalizarMoneda(monedaRaw)
+
+          // Debug para verificar normalización
+          if (monedaRaw !== monedaNormalizada) {
+            console.log(`💱 Comprobantes - Moneda normalizada: "${monedaRaw}" -> "${monedaNormalizada}"`)
+          }
+
+          return {
+            ...row,
+            id: `recibo-${Date.now()}-${index}`,
+            origen: "recibos",
+            CUIT: cuit, // Campo normalizado
+            Moneda: monedaNormalizada, // Campo normalizado
+            "Fecha Liquidación": fechaLiquidacion, // Campo normalizado
+            esCce,
+            datosOriginales: { ...row },
+          }
+        })
+
+        resolve(processedData)
+      } catch (error) {
+        console.error("❌ Error parseando Comprobantes:", error)
+        reject(error)
+      }
+    }
+
+    reader.onerror = () => reject(new Error("Error leyendo archivo Comprobantes"))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+// Parser para Movimientos Bancarios - MEJORADO con análisis detallado de estructura
+export async function parseMovimientosBancarios(
+  file: File,
+  esCera = false,
+): Promise<{
+  movimientos: any[]
+  transferencias: any[]
+  mercados: any[]
 }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: "array" })
         const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][]
 
-        const movimientos: MovimientoBancario[] = []
-        const transferencias: TransferenciaMonetaria[] = []
-        const mercados: MovimientoMercado[] = []
+        const movimientos: any[] = []
+        const transferencias: any[] = []
+        const mercados: any[] = []
 
         const moneda = inferirMoneda(file.name)
 
-        // Para movimientos bancarios: primera fila se omite, segunda fila son headers (índice 1), tercera fila en adelante es contenido (índice 2+)
-        const headerRow = 1 // Segunda fila (índice 1)
+        console.log(`🔍 INICIANDO PROCESAMIENTO ARCHIVO BANCARIO:`)
+        console.log(`📁 Archivo: ${file.name}`)
+        console.log(`💰 Moneda inferida: ${moneda}`)
+        console.log(`🏛️ Es CERA: ${esCera}`)
+        console.log(`📊 Total filas: ${jsonData.length}`)
 
-        if (jsonData.length < 3) {
-          console.warn("Archivo de movimientos bancarios muy corto")
+        // ANÁLISIS DETALLADO DE LA ESTRUCTURA DEL ARCHIVO
+        console.log(`\n🔍 ANÁLISIS DE ESTRUCTURA DEL ARCHIVO:`)
+        for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+          const row = jsonData[i] || []
+          console.log(`Fila ${i}: [${row.map((cell) => `"${cell}"`).join(", ")}]`)
+        }
+
+        // Buscar la fila de headers de forma más inteligente
+        let headerRow = -1
+        let dataStartRow = -1
+
+        // Buscar headers que contengan palabras clave
+        for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+          const row = jsonData[i] || []
+          const rowStr = row.join("").toLowerCase()
+
+          if (rowStr.includes("fecha") && rowStr.includes("beneficiario") && rowStr.includes("importe")) {
+            headerRow = i
+            dataStartRow = i + 1
+            console.log(`✅ Headers encontrados en fila ${i}`)
+            break
+          }
+        }
+
+        // Si no encontramos headers específicos, usar lógica por defecto
+        if (headerRow === -1) {
+          headerRow = 1 // Segunda fila por defecto
+          dataStartRow = 2 // Tercera fila por defecto
+          console.log(`⚠️ Headers no encontrados, usando fila ${headerRow} por defecto`)
+        }
+
+        // Verificar que tenemos suficientes filas
+        if (jsonData.length <= dataStartRow) {
+          console.warn(`❌ Archivo muy corto: ${jsonData.length} filas, necesita al menos ${dataStartRow + 1}`)
           resolve({ movimientos: [], transferencias: [], mercados: [] })
           return
         }
 
         const headers = jsonData[headerRow] || []
-        console.log("Headers Movimientos Bancarios:", headers)
+        console.log(`📋 Headers (fila ${headerRow}):`, headers)
 
-        // Buscar índices de columnas específicos según tu ejemplo
+        // Buscar índices de columnas específicos
         const colFecha = buscarColumna(headers, ["fecha"])
         const colBeneficiario = buscarColumna(headers, ["beneficiario"])
         const colDC = buscarColumna(headers, ["d/c", "dc"])
         const colImporte = buscarColumna(headers, ["importe"])
 
-        console.log("Índices Movimientos:", {
+        console.log("🔍 Índices de columnas encontrados:", {
           colFecha,
           colBeneficiario,
           colDC,
           colImporte,
         })
 
-        // Verificar que encontramos las columnas esperadas
-        if (colFecha !== 0 || colBeneficiario !== 4 || colDC !== 8 || colImporte !== 9) {
-          console.warn("Índices no coinciden con el formato esperado, usando los encontrados")
+        // Verificar que encontramos las columnas esenciales
+        if (colFecha === -1 || colBeneficiario === -1 || colImporte === -1) {
+          console.error("❌ No se encontraron columnas esenciales")
+          console.log("Headers disponibles:", headers)
+          resolve({ movimientos: [], transferencias: [], mercados: [] })
+          return
         }
 
-        // Procesar desde la tercera fila (índice 2)
-        for (let i = headerRow + 1; i < jsonData.length; i++) {
+        // Procesar desde la fila de datos
+        let filasProceadas = 0
+        for (let i = dataStartRow; i < jsonData.length; i++) {
           const row = jsonData[i]
           if (!row || row.length === 0) continue
 
           try {
             const fecha = convertirFecha(colFecha >= 0 ? row[colFecha]?.toString() || "" : "")
+            const fechaNormalizada = normalizarFecha(fecha)
             const beneficiario = colBeneficiario >= 0 ? row[colBeneficiario]?.toString() || "" : ""
             const dc = colDC >= 0 ? row[colDC]?.toString().toUpperCase() || "" : ""
             const importeStr = colImporte >= 0 ? row[colImporte]?.toString() || "0" : "0"
             const importe = convertirImporte(importeStr)
+
             const cuit = extraerCuitBeneficiario(beneficiario)
+
+            // Saltar filas vacías o sin datos relevantes
+            if (!fechaNormalizada && !beneficiario && importe === 0) {
+              continue
+            }
+
+            filasProceadas++
 
             // Debug para importes USD
             if (moneda === "USD") {
@@ -968,98 +568,119 @@ export async function parseMovimientosBancarios(file: File): Promise<{
               }
             })
 
-            // Filtrar solo movimientos "D" (débitos) para conciliación
+            // LOGS DEBUG DETALLADOS para cada movimiento
+            console.log(`🔍 FILA ${i + 1}:`)
+            console.log(`  📅 Fecha: ${fechaNormalizada}`)
+            console.log(`  👤 Beneficiario: ${beneficiario}`)
+            console.log(`  🆔 CUIT extraído: ${cuit}`)
+            console.log(`  💳 D/C: ${dc}`)
+            console.log(`  💰 Importe: ${importe} ${moneda}`)
+            console.log(`  🏛️ Es CERA: ${esCera}`)
+
+            // CORREGIDO: Lógica versión 120 para clasificar movimientos
+            // 1. Transferencias monetarias: CUIT 30711610126 (tanto C como D)
+            if (esCuitTransferencia(cuit)) {
+              console.log(`  ✅ CLASIFICADO COMO: TRANSFERENCIA MONETARIA (CUIT: ${cuit})`)
+              transferencias.push({
+                id: `transferencia-${Date.now()}-${i}`,
+                Fecha: fechaNormalizada,
+                Beneficiario: beneficiario,
+                CUIT: cuit,
+                "D/C": dc,
+                Importe: importe,
+                Moneda: moneda,
+                esCera,
+                datosOriginales,
+              })
+              continue
+            }
+
+            // 2. Mercados: CUITs específicos de mercados (tanto C como D)
+            if (esCuitMercado(cuit)) {
+              console.log(`  ✅ CLASIFICADO COMO: MERCADO (CUIT: ${cuit})`)
+              mercados.push({
+                id: `mercado-${Date.now()}-${i}`,
+                Fecha: fechaNormalizada,
+                Beneficiario: beneficiario,
+                CUIT: cuit,
+                "D/C": dc,
+                Importe: importe,
+                Moneda: moneda,
+                esCera,
+                datosOriginales,
+              })
+              continue
+            }
+
+
+
+
+
+
+            // 3. Movimientos para conciliación: solo débitos (D) y no impuestos
             if (dc === "D") {
               // Desestimar CUIT 30604731018
               if (cuit === "30604731018") {
+                console.log(`  ⚠️ DESCARTADO: CUIT excluido (${cuit})`)
                 continue
               }
 
-              // ACTUALIZADO: Verificar si es CUIT de mercados (incluye el nuevo CUIT)
-              if (esCuitMercado(cuit) && esBeneficiarioMercado(beneficiario)) {
-                mercados.push({
-                  id: `mercado-${Date.now()}-${i}`,
-                  fecha,
-                  beneficiario,
-                  cuit,
-                  dc,
-                  importe,
-                  moneda,
-                  datosOriginales,
-                })
-                continue
-              }
-
-              // ACTUALIZADO: Separar CUITs de mercados para transferencias monetarias (no mercados)
-              if (esCuitMercado(cuit) && !esBeneficiarioMercado(beneficiario)) {
-                transferencias.push({
-                  id: `transferencia-${Date.now()}-${i}`,
-                  fecha,
-                  beneficiario,
-                  cuit,
-                  dc,
-                  importe,
-                  moneda,
-                  datosOriginales,
-                })
-                continue
-              }
-
-              // Movimientos normales para conciliación
+              console.log(`  ✅ CLASIFICADO COMO: MOVIMIENTO PARA CONCILIACIÓN`)
               movimientos.push({
                 id: `movimiento-${Date.now()}-${i}`,
-                fecha,
-                beneficiario,
-                cuit,
-                dc,
-                importe,
-                moneda,
-                conciliadoSolicitudes: false,
-                conciliadoRecibos: false,
-                // NUEVOS: Inicializar campos de conciliación por importe
-                conciliadoSolicitudesPorImporte: false,
-                conciliadoRecibosPorImporte: false,
+                Fecha: fechaNormalizada,
+                Beneficiario: beneficiario,
+                CUIT: cuit,
+                "D/C": dc,
+                Importe: importe,
+                Moneda: moneda,
+                esCera,
                 tipoConciliacion: "no-conciliado",
                 datosOriginales,
               })
-            }
-
-            // ACTUALIZADO: Para transferencias monetarias y mercados, incluir tanto C como D
-            if (esCuitMercado(cuit)) {
-              // Verificar si es beneficiario de mercados
-              if (esBeneficiarioMercado(beneficiario)) {
-                mercados.push({
-                  id: `mercado-${Date.now()}-${i}`,
-                  fecha,
-                  beneficiario,
-                  cuit,
-                  dc,
-                  importe,
-                  moneda,
-                  datosOriginales,
-                })
-              } else {
-                // Si no es mercado, es transferencia monetaria
-                transferencias.push({
-                  id: `transferencia-${Date.now()}-${i}`,
-                  fecha,
-                  beneficiario,
-                  cuit,
-                  dc,
-                  importe,
-                  moneda,
-                  datosOriginales,
-                })
-              }
+            } else {
+              console.log(`  ⚠️ DESCARTADO: No es débito (D/C: ${dc})`)
             }
           } catch (error) {
             console.error(`Error procesando fila ${i} de Movimientos:`, error)
           }
         }
 
-        console.log(`✅ Movimientos Bancarios procesados: ${movimientos.length}`)
-        console.log(`✅ Transferencias Monetarias: ${transferencias.length}`)
-        console.log(`✅ Movimientos Mercados: ${mercados.length}`)
+        console.log(`\n📊 RESUMEN PROCESAMIENTO ARCHIVO BANCARIO:`)
+        console.log(`📝 Filas procesadas: ${filasProceadas}`)
+        console.log(`✅ Movimientos Bancarios procesados: ${movimientos.length} (CERA: ${esCera})`)
+        console.log(`✅ Transferencias Monetarias: ${transferencias.length} (CERA: ${esCera})`)
+        console.log(`✅ Movimientos Mercados: ${mercados.length} (CERA: ${esCera})`)
+
+        // LOG DETALLADO DE TRANSFERENCIAS CERA
+        if (esCera && transferencias.length > 0) {
+          console.log(`\n🏛️ TRANSFERENCIAS CERA ENCONTRADAS:`)
+          transferencias.forEach((trans, idx) => {
+            console.log(
+              `  ${idx + 1}. ${trans.Beneficiario} - CUIT: ${trans.CUIT} - ${trans["D/C"]} - ${trans.Importe} ${trans.Moneda}`,
+            )
+          })
+        }
+
+        // LOG DETALLADO DE MOVIMIENTOS CERA
+        if (esCera && movimientos.length > 0) {
+          console.log(`\n🏛️ MOVIMIENTOS CERA ENCONTRADOS:`)
+          movimientos.forEach((mov, idx) => {
+            console.log(
+              `  ${idx + 1}. ${mov.Beneficiario} - CUIT: ${mov.CUIT} - ${mov["D/C"]} - ${mov.Importe} ${mov.Moneda}`,
+            )
+          })
+        }
+
+        // Si no encontramos nada, mostrar advertencia
+        if (movimientos.length === 0 && transferencias.length === 0 && mercados.length === 0) {
+          console.warn(`⚠️ NO SE ENCONTRARON MOVIMIENTOS VÁLIDOS EN EL ARCHIVO`)
+          console.log(`Posibles causas:`)
+          console.log(`- Formato de archivo incorrecto`)
+          console.log(`- Headers no reconocidos`)
+          console.log(`- Datos en filas inesperadas`)
+          console.log(`- CUITs no extraídos correctamente`)
+        }
 
         resolve({ movimientos, transferencias, mercados })
       } catch (error) {
@@ -1072,302 +693,275 @@ export async function parseMovimientosBancarios(file: File): Promise<{
   })
 }
 
-// Función para unir Status y Confirmación en Solicitudes de Pago
-export function crearSolicitudesPago(
-  statusOrdenes: StatusOrdenPago[],
-  confirmaciones: ConfirmacionSolicitud[],
-): SolicitudPago[] {
-  const solicitudes: SolicitudPago[] = []
+// Función para crear solicitudes de pago unificadas
+export function crearSolicitudesPago(statusData: any[], confirmacionData: any[]): any[] {
+  console.log("🔄 Creando solicitudes unificadas...")
 
-  // Agregar Status Órdenes de Pago
-  statusOrdenes.forEach((status, index) => {
-    solicitudes.push({
-      id: `solicitud-status-${index}`,
-      fecha: status.fechaConcertacion,
-      comitenteNumero: status.comitenteNumero,
-      comitenteDescripcion: status.comitenteDescripcion,
-      moneda: status.moneda === "Pesos" ? "$" : status.moneda === "Dolar" ? "USD" : status.moneda,
-      importe: status.importe,
-      cuit: status.cuit,
-      estado: status.estado,
-      origen: "status",
-      conciliadoRecibos: false,
-      conciliadoMovimientos: false,
-      // NUEVOS: Inicializar campos de conciliación por importe
-      conciliadoRecibosPorImporte: false,
-      conciliadoMovimientosPorImporte: false,
-      tipoConciliacion: "no-conciliado",
-      datosOriginales: status.datosOriginales,
-    })
-  })
+  const solicitudes = [...statusData, ...confirmacionData].map((item, index) => ({
+    ...item,
+    id: `solicitud-${Date.now()}-${index}`,
+    tipoConciliacion: "no-conciliado" as TipoConciliacion,
+  }))
 
-  // Agregar Confirmaciones de Solicitudes
-  confirmaciones.forEach((confirmacion, index) => {
-    solicitudes.push({
-      id: `solicitud-confirmacion-${index}`,
-      fecha: confirmacion.fecha,
-      comitenteNumero: confirmacion.comitenteNumero,
-      comitenteDescripcion: confirmacion.comitenteDenominacion,
-      moneda:
-        confirmacion.monedaDescripcion === "Pesos"
-          ? "$"
-          : confirmacion.monedaDescripcion === "Dolar"
-            ? "USD"
-            : confirmacion.monedaDescripcion,
-      importe: confirmacion.importe,
-      cuit: confirmacion.cuit, // AHORA usa el CUIT de Confirmación de Solicitudes
-      estado: confirmacion.estado,
-      origen: "confirmacion",
-      conciliadoRecibos: false,
-      conciliadoMovimientos: false,
-      // NUEVOS: Inicializar campos de conciliación por importe
-      conciliadoRecibosPorImporte: false,
-      conciliadoMovimientosPorImporte: false,
-      tipoConciliacion: "no-conciliado",
-      datosOriginales: confirmacion.datosOriginales,
-    })
-  })
-
+  console.log("✅ Solicitudes creadas:", solicitudes.length)
   return solicitudes
 }
 
-// Función para generar clave de conciliación completa
-function generarClaveConciliacion(fecha: string, cuit: string, moneda: string, importe: number): string {
-  const monedaNormalizada = moneda === "Pesos" ? "$" : moneda === "Dolar" ? "USD" : moneda
-  return `${fecha}-${cuit}-${monedaNormalizada}-${importe.toFixed(2)}`
-}
+// FUNCIÓN DE CONCILIACIÓN CORREGIDA - Versión 121 + CERA
+export function realizarConciliacion(
+  solicitudes: any[],
+  comprobantes: any[],
+  movimientos: any[],
+): ResultadoConciliacion {
+  console.log("🔄 Iniciando conciliación versión 121 + CERA...")
 
-// NUEVA: Función para generar clave de conciliación solo por importe
-function generarClaveImporte(importe: number): string {
-  return importe.toFixed(2)
-}
+  // Preparar datos con estado inicial
+  const solicitudesConEstado = solicitudes.map((s) => ({
+    ...s,
+    tipoConciliacion: "no-conciliado" as TipoConciliacion,
+    conciliadoRecibos: false,
+    conciliadoMovimientos: false,
+    conciliadoRecibosPorImporte: false,
+    conciliadoMovimientosPorImporte: false,
+  }))
 
-// NUEVA: Función para conciliación automática por importe - CORREGIDA
-function conciliarPorImporte(
-  solicitudes: SolicitudPago[],
-  recibos: ReciboPago[],
-  movimientos: MovimientoBancario[],
-): void {
-  console.log("🟡 Iniciando conciliación automática por importe...")
+  const comprobantesConEstado = comprobantes.map((r) => ({
+    ...r,
+    tipoConciliacion: "no-conciliado" as TipoConciliacion,
+    conciliadoSolicitudes: false,
+    conciliadoMovimientos: false,
+    conciliadoSolicitudesPorImporte: false,
+    conciliadoMovimientosPorImporte: false,
+  }))
 
-  // Crear mapas de importes para los registros no conciliados
-  const solicitudesNoConciliadas = solicitudes.filter((s) => s.tipoConciliacion === "no-conciliado")
-  const recibosNoConciliados = recibos.filter((r) => r.tipoConciliacion === "no-conciliado")
-  const movimientosNoConciliados = movimientos.filter((m) => m.tipoConciliacion === "no-conciliado")
+  const movimientosConEstado = movimientos.map((m) => ({
+    ...m,
+    tipoConciliacion: "no-conciliado" as TipoConciliacion,
+    conciliadoSolicitudes: false,
+    conciliadoRecibos: false,
+    conciliadoSolicitudesPorImporte: false,
+    conciliadoRecibosPorImporte: false,
+  }))
 
-  console.log(
-    `📊 Registros no conciliados: ${solicitudesNoConciliadas.length} solicitudes, ${recibosNoConciliados.length} recibos, ${movimientosNoConciliados.length} movimientos`,
-  )
+  // FASE 1: CONCILIACIÓN COMPLETA
+  console.log("🔄 Fase 1: Conciliación completa (FECHA + CUIT + MONEDA + IMPORTE + CERA)...")
 
-  // Crear mapas por importe
-  const mapaSolicitudesPorImporte = new Map<string, SolicitudPago[]>()
-  const mapaRecibosPorImporte = new Map<string, ReciboPago[]>()
-  const mapaMovimientosPorImporte = new Map<string, MovimientoBancario[]>()
+  // 1.1 Solicitudes vs Comprobantes (completa)
+  solicitudesConEstado.forEach((solicitud) => {
+    comprobantesConEstado.forEach((comprobante) => {
+      if (solicitud.conciliadoRecibos || comprobante.conciliadoSolicitudes) return
 
-  // Indexar solicitudes no conciliadas por importe
-  solicitudesNoConciliadas.forEach((solicitud) => {
-    const claveImporte = generarClaveImporte(solicitud.importe)
-    if (!mapaSolicitudesPorImporte.has(claveImporte)) {
-      mapaSolicitudesPorImporte.set(claveImporte, [])
-    }
-    mapaSolicitudesPorImporte.get(claveImporte)!.push(solicitud)
+      // Verificar coincidencia completa + CERA
+      const fechaCoincide = solicitud.Fecha === comprobante["Fecha Liquidación"]
+      const cuitCoincide = solicitud.CUIT === comprobante.CUIT
+      const monedaCoincide = (solicitud.Moneda || "$") === (comprobante.Moneda || "$")
+      const importeCoincide = Math.abs((solicitud.Importe || 0) - (comprobante.Importe || 0)) < 0.01
+      const ceraCoincide = solicitud.esCce === comprobante.esCce // NUEVA VALIDACIÓN CERA
+
+      if (fechaCoincide && cuitCoincide && monedaCoincide && importeCoincide && ceraCoincide) {
+        solicitud.conciliadoRecibos = true
+        comprobante.conciliadoSolicitudes = true
+        console.log(`✅ Conciliación completa S-C: ${solicitud.id} <-> ${comprobante.id}`)
+      }
+    })
   })
 
-  // Indexar recibos no conciliados por importe
-  recibosNoConciliados.forEach((recibo) => {
-    const claveImporte = generarClaveImporte(recibo.importe)
-    if (!mapaRecibosPorImporte.has(claveImporte)) {
-      mapaRecibosPorImporte.set(claveImporte, [])
-    }
-    mapaRecibosPorImporte.get(claveImporte)!.push(recibo)
+  // 1.2 Solicitudes vs Movimientos (completa)
+  solicitudesConEstado.forEach((solicitud) => {
+    movimientosConEstado.forEach((movimiento) => {
+      if (solicitud.conciliadoMovimientos || movimiento.conciliadoSolicitudes) return
+
+      // Verificar coincidencia completa + CERA
+      const fechaCoincide = solicitud.Fecha === movimiento.Fecha
+      const cuitCoincide = solicitud.CUIT === movimiento.CUIT
+      const monedaCoincide = (solicitud.Moneda || "$") === (movimiento.Moneda || "$")
+      const importeCoincide = Math.abs((solicitud.Importe || 0) - (movimiento.Importe || 0)) < 0.01
+      const ceraCoincide = solicitud.esCce === movimiento.esCera // NUEVA VALIDACIÓN CERA
+
+      if (fechaCoincide && cuitCoincide && monedaCoincide && importeCoincide && ceraCoincide) {
+        solicitud.conciliadoMovimientos = true
+        movimiento.conciliadoSolicitudes = true
+        console.log(`✅ Conciliación completa S-M: ${solicitud.id} <-> ${movimiento.id}`)
+      }
+    })
   })
 
-  // Indexar movimientos no conciliados por importe
-  movimientosNoConciliados.forEach((movimiento) => {
-    const claveImporte = generarClaveImporte(movimiento.importe)
-    if (!mapaMovimientosPorImporte.has(claveImporte)) {
-      mapaMovimientosPorImporte.set(claveImporte, [])
-    }
-    mapaMovimientosPorImporte.get(claveImporte)!.push(movimiento)
+  // 1.3 Comprobantes vs Movimientos (completa)
+  comprobantesConEstado.forEach((comprobante) => {
+    movimientosConEstado.forEach((movimiento) => {
+      if (comprobante.conciliadoMovimientos || movimiento.conciliadoRecibos) return
+
+      // Verificar coincidencia completa + CERA
+      const fechaCoincide = comprobante["Fecha Liquidación"] === movimiento.Fecha
+      const cuitCoincide = comprobante.CUIT === movimiento.CUIT
+      const monedaCoincide = (comprobante.Moneda || "$") === (movimiento.Moneda || "$")
+      const importeCoincide = Math.abs((comprobante.Importe || 0) - (movimiento.Importe || 0)) < 0.01
+      const ceraCoincide = comprobante.esCce === movimiento.esCera // NUEVA VALIDACIÓN CERA
+
+      if (fechaCoincide && cuitCoincide && monedaCoincide && importeCoincide && ceraCoincide) {
+        comprobante.conciliadoMovimientos = true
+        movimiento.conciliadoRecibos = true
+        console.log(`✅ Conciliación completa C-M: ${comprobante.id} <-> ${movimiento.id}`)
+      }
+    })
   })
 
+  // FASE 2: CONCILIACIÓN POR IMPORTE (solo para los que no se conciliaron completamente)
+  console.log("🔄 Fase 2: Conciliación por importe (FECHA + MONEDA + IMPORTE + CERA, sin CUIT)...")
+
+  // 2.1 Solicitudes vs Comprobantes (por importe)
+  solicitudesConEstado.forEach((solicitud) => {
+    if (solicitud.conciliadoRecibos) return // Ya conciliado completamente
+
+    comprobantesConEstado.forEach((comprobante) => {
+      if (
+        comprobante.conciliadoSolicitudes ||
+        solicitud.conciliadoRecibosPorImporte ||
+        comprobante.conciliadoSolicitudesPorImporte
+      )
+        return
+
+      // Verificar coincidencia por importe + CERA (sin CUIT)
+      const fechaCoincide = solicitud.Fecha === comprobante["Fecha Liquidación"]
+      const monedaCoincide = (solicitud.Moneda || "$") === (comprobante.Moneda || "$")
+      const importeCoincide = Math.abs((solicitud.Importe || 0) - (comprobante.Importe || 0)) < 0.01
+      const ceraCoincide = solicitud.esCce === comprobante.esCce // NUEVA VALIDACIÓN CERA
+
+      if (fechaCoincide && monedaCoincide && importeCoincide && ceraCoincide) {
+        solicitud.conciliadoRecibosPorImporte = true
+        comprobante.conciliadoSolicitudesPorImporte = true
+        console.log(`🟡 Conciliación por importe S-C: ${solicitud.id} <-> ${comprobante.id}`)
+      }
+    })
+  })
+
+  // 2.2 Solicitudes vs Movimientos (por importe)
+  solicitudesConEstado.forEach((solicitud) => {
+    if (solicitud.conciliadoMovimientos) return // Ya conciliado completamente
+
+    movimientosConEstado.forEach((movimiento) => {
+      if (
+        movimiento.conciliadoSolicitudes ||
+        solicitud.conciliadoMovimientosPorImporte ||
+        movimiento.conciliadoSolicitudesPorImporte
+      )
+        return
+
+      // Verificar coincidencia por importe + CERA (sin CUIT)
+      const fechaCoincide = solicitud.Fecha === movimiento.Fecha
+      const monedaCoincide = (solicitud.Moneda || "$") === (movimiento.Moneda || "$")
+      const importeCoincide = Math.abs((solicitud.Importe || 0) - (movimiento.Importe || 0)) < 0.01
+      const ceraCoincide = solicitud.esCce === movimiento.esCera // NUEVA VALIDACIÓN CERA
+
+      if (fechaCoincide && monedaCoincide && importeCoincide && ceraCoincide) {
+        solicitud.conciliadoMovimientosPorImporte = true
+        movimiento.conciliadoSolicitudesPorImporte = true
+        console.log(`🟡 Conciliación por importe S-M: ${solicitud.id} <-> ${movimiento.id}`)
+      }
+    })
+  })
+
+  // 2.3 Comprobantes vs Movimientos (por importe)
+  comprobantesConEstado.forEach((comprobante) => {
+    if (comprobante.conciliadoMovimientos) return // Ya conciliado completamente
+
+    movimientosConEstado.forEach((movimiento) => {
+      if (
+        movimiento.conciliadoRecibos ||
+        comprobante.conciliadoMovimientosPorImporte ||
+        movimiento.conciliadoRecibosPorImporte
+      )
+        return
+
+      // Verificar coincidencia por importe + CERA (sin CUIT)
+      const fechaCoincide = comprobante["Fecha Liquidación"] === movimiento.Fecha
+      const monedaCoincide = (comprobante.Moneda || "$") === (movimiento.Moneda || "$")
+      const importeCoincide = Math.abs((comprobante.Importe || 0) - (movimiento.Importe || 0)) < 0.01
+      const ceraCoincide = comprobante.esCce === movimiento.esCera // NUEVA VALIDACIÓN CERA
+
+      if (fechaCoincide && monedaCoincide && importeCoincide && ceraCoincide) {
+        comprobante.conciliadoMovimientosPorImporte = true
+        movimiento.conciliadoRecibosPorImporte = true
+        console.log(`🟡 Conciliación por importe C-M: ${comprobante.id} <-> ${movimiento.id}`)
+      }
+    })
+  })
+
+  // FASE 3: DETERMINAR TIPO DE CONCILIACIÓN FINAL
+  console.log("🔄 Fase 3: Determinando tipos de conciliación final...")
+
+  let conciliadosCompletos = 0
   let conciliadosPorImporte = 0
 
-  // CORREGIDO: Conciliar SOLO cuando el importe aparece en los 3 tipos de registros
-  const importesUnicos = new Set([
-    ...Array.from(mapaSolicitudesPorImporte.keys()),
-    ...Array.from(mapaRecibosPorImporte.keys()),
-    ...Array.from(mapaMovimientosPorImporte.keys()),
-  ])
-
-  for (const importe of importesUnicos) {
-    const solicitudesConImporte = mapaSolicitudesPorImporte.get(importe) || []
-    const recibosConImporte = mapaRecibosPorImporte.get(importe) || []
-    const movimientosConImporte = mapaMovimientosPorImporte.get(importe) || []
-
-    // CORREGIDO: Solo conciliar si el importe aparece en los 3 tipos de registros
-    if (solicitudesConImporte.length > 0 && recibosConImporte.length > 0 && movimientosConImporte.length > 0) {
-      console.log(
-        `🟡 Conciliando por importe ${importe}: ${solicitudesConImporte.length} solicitudes, ${recibosConImporte.length} recibos, ${movimientosConImporte.length} movimientos`,
-      )
-
-      // Marcar solicitudes
-      solicitudesConImporte.forEach((solicitud) => {
-        solicitud.conciliadoRecibosPorImporte = true
-        solicitud.conciliadoMovimientosPorImporte = true
-        solicitud.tipoConciliacion = "por-importe"
-        conciliadosPorImporte++
-      })
-
-      // Marcar recibos
-      recibosConImporte.forEach((recibo) => {
-        recibo.conciliadoSolicitudesPorImporte = true
-        recibo.conciliadoMovimientosPorImporte = true
-        recibo.tipoConciliacion = "por-importe"
-        conciliadosPorImporte++
-      })
-
-      // Marcar movimientos
-      movimientosConImporte.forEach((movimiento) => {
-        movimiento.conciliadoSolicitudesPorImporte = true
-        movimiento.conciliadoRecibosPorImporte = true
-        movimiento.tipoConciliacion = "por-importe"
-        conciliadosPorImporte++
-      })
-    }
-  }
-
-  console.log(`🟡 Conciliación por importe completada: ${conciliadosPorImporte} registros conciliados`)
-}
-
-// Función principal de conciliación (ACTUALIZADA)
-export function realizarConciliacion(
-  solicitudes: SolicitudPago[],
-  recibos: ReciboPago[],
-  movimientos: MovimientoBancario[],
-): ResultadoConciliacion {
-  console.log("🔄 Iniciando conciliación completa...")
-
-  // PASO 1: Conciliación completa (fecha + CUIT + moneda + importe)
-  console.log("🟢 Paso 1: Conciliación completa...")
-
-  // Crear mapas de claves para búsqueda rápida
-  const mapaSolicitudes = new Map<string, SolicitudPago[]>()
-  const mapaRecibos = new Map<string, ReciboPago[]>()
-  const mapaMovimientos = new Map<string, MovimientoBancario[]>()
-
-  // Indexar solicitudes
-  solicitudes.forEach((solicitud) => {
-    const clave = generarClaveConciliacion(solicitud.fecha, solicitud.cuit, solicitud.moneda, solicitud.importe)
-    if (!mapaSolicitudes.has(clave)) {
-      mapaSolicitudes.set(clave, [])
-    }
-    mapaSolicitudes.get(clave)!.push(solicitud)
-  })
-
-  // Indexar recibos
-  recibos.forEach((recibo) => {
-    // Usar la moneda del recibo si está disponible, de lo contrario asumir pesos
-    const moneda = recibo.moneda || "$"
-    const clave = generarClaveConciliacion(recibo.fechaLiquidacion, recibo.cuit, moneda, recibo.importe)
-    if (!mapaRecibos.has(clave)) {
-      mapaRecibos.set(clave, [])
-    }
-    mapaRecibos.get(clave)!.push(recibo)
-  })
-
-  // Indexar movimientos
-  movimientos.forEach((movimiento) => {
-    const clave = generarClaveConciliacion(movimiento.fecha, movimiento.cuit, movimiento.moneda, movimiento.importe)
-    if (!mapaMovimientos.has(clave)) {
-      mapaMovimientos.set(clave, [])
-    }
-    mapaMovimientos.get(clave)!.push(movimiento)
-  })
-
-  // Realizar conciliación completa
-  let conciliadosCompletos = 0
-
-  // Conciliar solicitudes
-  solicitudes.forEach((solicitud) => {
-    const clave = generarClaveConciliacion(solicitud.fecha, solicitud.cuit, solicitud.moneda, solicitud.importe)
-
-    if (mapaRecibos.has(clave)) {
-      solicitud.conciliadoRecibos = true
-      mapaRecibos.get(clave)!.forEach((recibo) => {
-        recibo.conciliadoSolicitudes = true
-      })
-    }
-
-    if (mapaMovimientos.has(clave)) {
-      solicitud.conciliadoMovimientos = true
-      mapaMovimientos.get(clave)!.forEach((movimiento) => {
-        movimiento.conciliadoSolicitudes = true
-      })
-    }
-
-    // Actualizar tipo de conciliación
+  // Determinar tipo para solicitudes
+  solicitudesConEstado.forEach((solicitud) => {
     if (solicitud.conciliadoRecibos && solicitud.conciliadoMovimientos) {
       solicitud.tipoConciliacion = "completa"
       conciliadosCompletos++
+    } else if (
+      (solicitud.conciliadoRecibos || solicitud.conciliadoRecibosPorImporte) &&
+      (solicitud.conciliadoMovimientos || solicitud.conciliadoMovimientosPorImporte)
+    ) {
+      solicitud.tipoConciliacion = "por-importe"
+      conciliadosPorImporte++
+    } else {
+      solicitud.tipoConciliacion = "no-conciliado"
     }
   })
 
-  // Conciliar recibos con movimientos
-  recibos.forEach((recibo) => {
-    // Usar la moneda del recibo si está disponible, de lo contrario asumir pesos
-    const moneda = recibo.moneda || "$"
-    const clave = generarClaveConciliacion(recibo.fechaLiquidacion, recibo.cuit, moneda, recibo.importe)
-
-    if (mapaMovimientos.has(clave)) {
-      recibo.conciliadoMovimientos = true
-      mapaMovimientos.get(clave)!.forEach((movimiento) => {
-        movimiento.conciliadoRecibos = true
-      })
-    }
-
-    // Actualizar tipo de conciliación para recibos
-    if (recibo.conciliadoSolicitudes && recibo.conciliadoMovimientos) {
-      recibo.tipoConciliacion = "completa"
+  // Determinar tipo para comprobantes
+  comprobantesConEstado.forEach((comprobante) => {
+    if (comprobante.conciliadoSolicitudes && comprobante.conciliadoMovimientos) {
+      comprobante.tipoConciliacion = "completa"
+      conciliadosCompletos++
+    } else if (
+      (comprobante.conciliadoSolicitudes || comprobante.conciliadoSolicitudesPorImporte) &&
+      (comprobante.conciliadoMovimientos || comprobante.conciliadoMovimientosPorImporte)
+    ) {
+      comprobante.tipoConciliacion = "por-importe"
+      conciliadosPorImporte++
+    } else {
+      comprobante.tipoConciliacion = "no-conciliado"
     }
   })
 
-  // Actualizar tipo de conciliación para movimientos
-  movimientos.forEach((movimiento) => {
+  // Determinar tipo para movimientos
+  movimientosConEstado.forEach((movimiento) => {
     if (movimiento.conciliadoSolicitudes && movimiento.conciliadoRecibos) {
       movimiento.tipoConciliacion = "completa"
+      conciliadosCompletos++
+    } else if (
+      (movimiento.conciliadoSolicitudes || movimiento.conciliadoSolicitudesPorImporte) &&
+      (movimiento.conciliadoRecibos || movimiento.conciliadoRecibosPorImporte)
+    ) {
+      movimiento.tipoConciliacion = "por-importe"
+      conciliadosPorImporte++
+    } else {
+      movimiento.tipoConciliacion = "no-conciliado"
     }
   })
 
-  console.log(`🟢 Conciliación completa: ${conciliadosCompletos} registros conciliados completamente`)
+  const noConciliados =
+    solicitudesConEstado.filter((s) => s.tipoConciliacion === "no-conciliado").length +
+    comprobantesConEstado.filter((r) => r.tipoConciliacion === "no-conciliado").length +
+    movimientosConEstado.filter((m) => m.tipoConciliacion === "no-conciliado").length
 
-  // PASO 2: Conciliación automática por importe para los no conciliados
-  conciliarPorImporte(solicitudes, recibos, movimientos)
-
-  // Calcular estadísticas finales
-  const conciliadosPorImporte =
-    solicitudes.filter((s) => s.tipoConciliacion === "por-importe").length +
-    recibos.filter((r) => r.tipoConciliacion === "por-importe").length +
-    movimientos.filter((m) => m.tipoConciliacion === "por-importe").length
-
-  const totalRegistros = solicitudes.length + recibos.length + movimientos.length
-  const noConciliados = totalRegistros - conciliadosCompletos * 3 - conciliadosPorImporte
-
-  console.log(`✅ Conciliación total completada:`)
-  console.log(`   🟢 Completos: ${conciliadosCompletos}`)
-  console.log(`   🟡 Por importe: ${conciliadosPorImporte}`)
-  console.log(`   🔴 No conciliados: ${noConciliados}`)
+  console.log("✅ Conciliación completada:", {
+    completos: conciliadosCompletos,
+    porImporte: conciliadosPorImporte,
+    noConciliados,
+  })
 
   return {
-    solicitudesPago: solicitudes,
-    recibosPago: recibos,
-    movimientosBancarios: movimientos,
-    transferenciasMonetarias: [], // Se llenarán desde el parser
-    movimientosMercados: [], // Se llenarán desde el parser
+    solicitudesPago: solicitudesConEstado,
+    recibosPago: comprobantesConEstado,
+    movimientosBancarios: movimientosConEstado,
+    transferenciasMonetarias: [],
+    movimientosMercados: [],
     estadisticas: {
-      totalSolicitudes: solicitudes.length,
-      totalRecibos: recibos.length,
-      totalMovimientos: movimientos.length,
+      totalSolicitudes: solicitudesConEstado.length,
+      totalRecibos: comprobantesConEstado.length,
+      totalMovimientos: movimientosConEstado.length,
       conciliadosCompletos,
       conciliadosPorImporte,
       noConciliados,
