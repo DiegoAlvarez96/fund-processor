@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,11 +21,14 @@ import {
   CheckCircle,
   XCircle,
   BarChart3,
-  AlertCircle,
+  AlertTriangle,
   Trash2,
   RefreshCw,
   Download,
-  AlertTriangle,
+  Plus,
+  X,
+  AlertCircle,
+  Clock,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { ResultadoConciliacion, TipoConciliacion } from "@/lib/conciliacion-types"
@@ -39,6 +42,137 @@ import {
 } from "@/lib/conciliacion-parser"
 import { exportarConciliacionExcel } from "@/lib/conciliacion-excel-export"
 
+// Interfaz para archivos bancarios con información CERA
+interface ArchivoBancario {
+  file: File
+  esCera: boolean
+  id: string
+}
+
+interface DetalleModalProps {
+  item: any
+  onClose: () => void
+}
+
+function DetalleModal({ item, onClose }: DetalleModalProps) {
+  if (!item) return null
+
+  const getTipoBadge = (tipo: TipoConciliacion) => {
+    switch (tipo) {
+      case "completa":
+        return <Badge className="bg-green-500">Completa</Badge>
+      case "por-importe":
+        return <Badge className="bg-yellow-500">Por Importe</Badge>
+      default:
+        return <Badge variant="destructive">No Conciliado</Badge>
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Detalle de Conciliación</h3>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Información principal */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <strong>Tipo:</strong> {item.origen || "Movimiento"}
+            </div>
+            <div>
+              <strong>Estado:</strong> {getTipoBadge(item.tipoConciliacion)}
+            </div>
+            <div>
+              <strong>CUIT:</strong> {item.CUIT || "N/A"}
+            </div>
+            <div>
+              <strong>Fecha:</strong> {item.Fecha || item["Fecha Liquidación"] || "N/A"}
+            </div>
+            <div>
+              <strong>Importe:</strong> {item.Moneda || "$"} {item.Importe?.toLocaleString() || "N/A"}
+            </div>
+            <div>
+              <strong>CERA/CCE:</strong> {item.esCce ? "CCE" : item.esCera ? "CERA" : "Normal"}
+            </div>
+          </div>
+
+          {/* Movimientos conciliados */}
+          {item.movimientosConciliados && item.movimientosConciliados.length > 0 && (
+            <div>
+              <h4 className="font-semibold mb-2">Conciliado con:</h4>
+              {item.movimientosConciliados.map((mov: any, index: number) => (
+                <div key={index} className="bg-gray-50 p-3 rounded border">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <strong>Beneficiario:</strong> {mov.Beneficiario}
+                    </div>
+                    <div>
+                      <strong>CUIT:</strong> {mov.CUIT}
+                    </div>
+                    <div>
+                      <strong>Fecha:</strong> {mov.Fecha}
+                    </div>
+                    <div>
+                      <strong>Importe:</strong> {mov.Moneda} {mov.Importe?.toLocaleString()}
+                    </div>
+                    <div>
+                      <strong>Tipo:</strong> {mov.esCera ? "CERA" : "Normal"}
+                    </div>
+                    <div>
+                      <strong>D/C:</strong> {mov["D/C"]}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Con qué se concilió (para movimientos) */}
+          {item.conciliadoCon && item.conciliadoCon.length > 0 && (
+            <div>
+              <h4 className="font-semibold mb-2">Concilió con:</h4>
+              {item.conciliadoCon.map((conc: any, index: number) => (
+                <div key={index} className="bg-gray-50 p-3 rounded border">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <strong>Origen:</strong> {conc.origen}
+                    </div>
+                    <div>
+                      <strong>CUIT:</strong> {conc.CUIT}
+                    </div>
+                    <div>
+                      <strong>Fecha:</strong> {conc.Fecha || conc["Fecha Liquidación"]}
+                    </div>
+                    <div>
+                      <strong>Importe:</strong> {conc.Moneda || "$"} {conc.Importe?.toLocaleString()}
+                    </div>
+                    <div>
+                      <strong>Tipo:</strong> {conc.esCce ? "CCE" : "Normal"}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Datos originales */}
+          <div>
+            <h4 className="font-semibold mb-2">Datos Originales:</h4>
+            <div className="bg-gray-50 p-3 rounded text-xs max-h-40 overflow-y-auto">
+              <pre>{JSON.stringify(item.datosOriginales, null, 2)}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ConciliacionTransferencias() {
   const { toast } = useToast()
 
@@ -46,8 +180,10 @@ export default function ConciliacionTransferencias() {
   const [archivoStatus, setArchivoStatus] = useState<File | null>(null)
   const [archivoConfirmacion, setArchivoConfirmacion] = useState<File | null>(null)
   const [archivoRecibos, setArchivoRecibos] = useState<File | null>(null)
-  const [archivoMovimientosPesos, setArchivoMovimientosPesos] = useState<File | null>(null)
-  const [archivoMovimientosUSD, setArchivoMovimientosUSD] = useState<File | null>(null)
+
+  // Estados para múltiples archivos bancarios
+  const [archivosBancariosPesos, setArchivosBancariosPesos] = useState<ArchivoBancario[]>([])
+  const [archivosBancariosUSD, setArchivosBancariosUSD] = useState<ArchivoBancario[]>([])
 
   // Estados para datos procesados
   const [resultadoConciliacion, setResultadoConciliacion] = useState<ResultadoConciliacion | null>(null)
@@ -75,6 +211,11 @@ export default function ConciliacionTransferencias() {
   // Estados para modal de detalles
   const [showDetalles, setShowDetalles] = useState(false)
   const [detallesSeleccionados, setDetallesSeleccionados] = useState<any>(null)
+
+  // Estados para modal CERA
+  const [showCeraModal, setShowCeraModal] = useState(false)
+  const [archivoTemporal, setArchivoTemporal] = useState<File | null>(null)
+  const [tipoMonedaTemporal, setTipoMonedaTemporal] = useState<"pesos" | "usd">("pesos")
 
   // Referencias para inputs de archivos
   const statusInputRef = useRef<HTMLInputElement>(null)
@@ -111,7 +252,7 @@ export default function ConciliacionTransferencias() {
     }
   }
 
-  // Función para manejar selección de archivos
+  // Función para manejar selección de archivos básicos
   const handleFileSelect = (
     event: React.ChangeEvent<HTMLInputElement>,
     setter: React.Dispatch<React.SetStateAction<File | null>>,
@@ -138,6 +279,78 @@ export default function ConciliacionTransferencias() {
     toast({
       title: `Archivo ${tipo} cargado`,
       description: `${file.name} - ${(file.size / 1024).toFixed(1)} KB`,
+    })
+  }
+
+  // Función para manejar selección de archivos bancarios
+  const handleBankFileSelect = (event: React.ChangeEvent<HTMLInputElement>, tipoMoneda: "pesos" | "usd") => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validar extensión
+    const validExtensions = [".xlsx", ".xls", ".csv"]
+    const fileName = file.name.toLowerCase()
+    const hasValidExtension = validExtensions.some((ext) => fileName.endsWith(ext))
+
+    if (!hasValidExtension) {
+      toast({
+        title: "Archivo no válido",
+        description: "Use archivos .xlsx, .xls o .csv",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Mostrar modal para preguntar si es CERA
+    setArchivoTemporal(file)
+    setTipoMonedaTemporal(tipoMoneda)
+    setShowCeraModal(true)
+  }
+
+  // Función para confirmar archivo bancario con información CERA
+  const confirmarArchivoBancario = (esCera: boolean) => {
+    if (!archivoTemporal) return
+
+    const nuevoArchivo: ArchivoBancario = {
+      file: archivoTemporal,
+      esCera,
+      id: `${Date.now()}-${Math.random()}`,
+    }
+
+    if (tipoMonedaTemporal === "pesos") {
+      setArchivosBancariosPesos((prev) => [...prev, nuevoArchivo])
+    } else {
+      setArchivosBancariosUSD((prev) => [...prev, nuevoArchivo])
+    }
+
+    toast({
+      title: `Archivo ${tipoMonedaTemporal.toUpperCase()} agregado`,
+      description: `${archivoTemporal.name} - ${esCera ? "CERA" : "Normal"} - ${(archivoTemporal.size / 1024).toFixed(1)} KB`,
+    })
+
+    // Limpiar estados temporales
+    setArchivoTemporal(null)
+    setShowCeraModal(false)
+
+    // Limpiar input
+    if (tipoMonedaTemporal === "pesos" && movimientosPesosInputRef.current) {
+      movimientosPesosInputRef.current.value = ""
+    } else if (tipoMonedaTemporal === "usd" && movimientosUSDInputRef.current) {
+      movimientosUSDInputRef.current.value = ""
+    }
+  }
+
+  // Función para eliminar archivo bancario
+  const eliminarArchivoBancario = (id: string, tipoMoneda: "pesos" | "usd") => {
+    if (tipoMoneda === "pesos") {
+      setArchivosBancariosPesos((prev) => prev.filter((archivo) => archivo.id !== id))
+    } else {
+      setArchivosBancariosUSD((prev) => prev.filter((archivo) => archivo.id !== id))
+    }
+
+    toast({
+      title: "Archivo eliminado",
+      description: `Archivo ${tipoMoneda.toUpperCase()} eliminado de la lista`,
     })
   }
 
@@ -177,10 +390,10 @@ export default function ConciliacionTransferencias() {
 
   // Función principal para procesar todos los archivos
   const procesarArchivos = async () => {
-    if (!archivoStatus || !archivoConfirmacion || !archivoRecibos || !archivoMovimientosPesos) {
+    if (!archivoStatus || !archivoConfirmacion || !archivoRecibos || archivosBancariosPesos.length === 0) {
       toast({
         title: "Archivos faltantes",
-        description: "Debe cargar al menos Status, Confirmación, Recibos y Movimientos Pesos",
+        description: "Debe cargar al menos Status, Confirmación, Comprobantes y un archivo bancario de Pesos",
         variant: "destructive",
       })
       return
@@ -201,39 +414,80 @@ export default function ConciliacionTransferencias() {
       setProgressMessage("Procesando Confirmación de Solicitudes...")
       const confirmacionData = await parseConfirmacionSolicitudes(archivoConfirmacion)
 
-      // Procesar Recibos con progreso
-      setProgressMessage("Procesando Recibos de Pago...")
+      // Procesar Comprobantes con progreso
+      setProgressMessage("Procesando Comprobantes de Pago...")
       const recibosData = await parseRecibosPago(archivoRecibos, updateProgress)
 
       setProgressMessage("Procesando Movimientos Bancarios...")
-      const [movimientosPesosData, movimientosUSDData] = await Promise.all([
-        parseMovimientosBancarios(archivoMovimientosPesos),
-        archivoMovimientosUSD
-          ? parseMovimientosBancarios(archivoMovimientosUSD)
-          : Promise.resolve({ movimientos: [], transferencias: [], mercados: [] }),
-      ])
+
+      // Procesar múltiples archivos bancarios
+      let todosMovimientosPesos: any[] = []
+      let todasTransferenciasPesos: any[] = []
+      let todosMercadosPesos: any[] = []
+
+      // Procesar archivos de pesos
+      for (const archivoBancario of archivosBancariosPesos) {
+        const resultado = await parseMovimientosBancarios(archivoBancario.file, archivoBancario.esCera)
+
+        // Marcar movimientos con información CERA
+        resultado.movimientos.forEach((mov) => {
+          mov.esCera = archivoBancario.esCera
+        })
+        resultado.transferencias.forEach((trans) => {
+          trans.esCera = archivoBancario.esCera
+        })
+        resultado.mercados.forEach((merc) => {
+          merc.esCera = archivoBancario.esCera
+        })
+
+        todosMovimientosPesos = [...todosMovimientosPesos, ...resultado.movimientos]
+        todasTransferenciasPesos = [...todasTransferenciasPesos, ...resultado.transferencias]
+        todosMercadosPesos = [...todosMercadosPesos, ...resultado.mercados]
+      }
+
+      // Procesar archivos USD si existen
+      let todosMovimientosUSD: any[] = []
+      let todasTransferenciasUSD: any[] = []
+      let todosMercadosUSD: any[] = []
+
+      for (const archivoBancario of archivosBancariosUSD) {
+        const resultado = await parseMovimientosBancarios(archivoBancario.file, archivoBancario.esCera)
+
+        // Marcar movimientos con información CERA
+        resultado.movimientos.forEach((mov) => {
+          mov.esCera = archivoBancario.esCera
+        })
+        resultado.transferencias.forEach((trans) => {
+          trans.esCera = archivoBancario.esCera
+        })
+        resultado.mercados.forEach((merc) => {
+          merc.esCera = archivoBancario.esCera
+        })
+
+        todosMovimientosUSD = [...todosMovimientosUSD, ...resultado.movimientos]
+        todasTransferenciasUSD = [...todasTransferenciasUSD, ...resultado.transferencias]
+        todosMercadosUSD = [...todosMercadosUSD, ...resultado.mercados]
+      }
 
       console.log("📊 Datos procesados:", {
         statusOrdenes: statusData.length,
         confirmaciones: confirmacionData.length,
-        recibos: recibosData.length,
-        movimientosPesos: movimientosPesosData.movimientos.length,
-        movimientosUSD: movimientosUSDData.movimientos.length,
+        comprobantes: recibosData.length,
+        movimientosPesos: todosMovimientosPesos.length,
+        movimientosUSD: todosMovimientosUSD.length,
       })
 
       setProgressMessage("Creando solicitudes de pago...")
       // Unir solicitudes de pago
       const solicitudesPago = crearSolicitudesPago(statusData, confirmacionData)
 
-      // Combinar movimientos de pesos y USD
-      const todosMovimientos = [...movimientosPesosData.movimientos, ...movimientosUSDData.movimientos]
-
-      const todasTransferencias = [...movimientosPesosData.transferencias, ...movimientosUSDData.transferencias]
-
-      const todosMercados = [...movimientosPesosData.mercados, ...movimientosUSDData.mercados]
+      // Combinar todos los movimientos
+      const todosMovimientos = [...todosMovimientosPesos, ...todosMovimientosUSD]
+      const todasTransferencias = [...todasTransferenciasPesos, ...todasTransferenciasUSD]
+      const todosMercados = [...todosMercadosPesos, ...todosMercadosUSD]
 
       setProgressMessage("Realizando conciliación completa y por importe...")
-      // Realizar conciliación (ahora incluye ambos tipos)
+      // Realizar conciliación (ahora incluye lógica CERA)
       const resultado = realizarConciliacion(solicitudesPago, recibosData, todosMovimientos)
 
       // Agregar transferencias y mercados al resultado
@@ -264,8 +518,8 @@ export default function ConciliacionTransferencias() {
     setArchivoStatus(null)
     setArchivoConfirmacion(null)
     setArchivoRecibos(null)
-    setArchivoMovimientosPesos(null)
-    setArchivoMovimientosUSD(null)
+    setArchivosBancariosPesos([])
+    setArchivosBancariosUSD([])
     setResultadoConciliacion(null)
 
     // Limpiar inputs
@@ -288,7 +542,10 @@ export default function ConciliacionTransferencias() {
   }
 
   // Función para formatear números
-  const formatearNumero = (numero: number): string => {
+  const formatearNumero = (numero: number | null | undefined): string => {
+    if (numero === null || numero === undefined || Number.isNaN(numero)) {
+      return "-"
+    }
     return numero.toLocaleString("es-AR", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -313,16 +570,20 @@ export default function ConciliacionTransferencias() {
       if (busquedaSolicitudes.trim()) {
         const termino = busquedaSolicitudes.toLowerCase()
         return (
-          solicitud.comitenteNumero.toLowerCase().includes(termino) ||
-          solicitud.comitenteDescripcion.toLowerCase().includes(termino) ||
-          solicitud.cuit.includes(termino)
+          String(solicitud["Comitente (Número)"] || "")
+            .toLowerCase()
+            .includes(termino) ||
+          String(solicitud["Comitente (Denominación)"] || solicitud["Comitente (Descripción)"] || "")
+            .toLowerCase()
+            .includes(termino) ||
+          String(solicitud.CUIT || "").includes(termino)
         )
       }
 
       return true
     }) || []
 
-  // Función para filtrar recibos
+  // Función para filtrar comprobantes
   const recibosFiltrados =
     resultadoConciliacion?.recibosPago.filter((recibo) => {
       // Filtro por estado de conciliación
@@ -340,9 +601,13 @@ export default function ConciliacionTransferencias() {
       if (busquedaRecibos.trim()) {
         const termino = busquedaRecibos.toLowerCase()
         return (
-          recibo.comitenteNumero.toLowerCase().includes(termino) ||
-          recibo.comitenteDenominacion.toLowerCase().includes(termino) ||
-          recibo.cuit.includes(termino)
+          String(recibo["Comitente (Número)"] || "")
+            .toLowerCase()
+            .includes(termino) ||
+          String(recibo["Comitente (Denominación)"] || "")
+            .toLowerCase()
+            .includes(termino) ||
+          String(recibo.CUIT || "").includes(termino)
         )
       }
 
@@ -366,11 +631,57 @@ export default function ConciliacionTransferencias() {
       // Filtro por búsqueda
       if (busquedaMovimientos.trim()) {
         const termino = busquedaMovimientos.toLowerCase()
-        return movimiento.beneficiario.toLowerCase().includes(termino) || movimiento.cuit.includes(termino)
+        return (
+          String(movimiento.Beneficiario || "")
+            .toLowerCase()
+            .includes(termino) || String(movimiento.CUIT || "").includes(termino)
+        )
       }
 
       return true
     }) || []
+
+  const getTipoBadge = (tipo: TipoConciliacion) => {
+    switch (tipo) {
+      case "completa":
+        return (
+          <Badge className="bg-green-500">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Completa
+          </Badge>
+        )
+      case "por-importe":
+        return (
+          <Badge className="bg-yellow-500">
+            <Clock className="w-3 h-3 mr-1" />
+            Por Importe
+          </Badge>
+        )
+      default:
+        return (
+          <Badge variant="destructive">
+            <AlertCircle className="w-3 h-3 mr-1" />
+            No Conciliado
+          </Badge>
+        )
+    }
+  }
+
+  const estadisticas = useMemo(() => {
+    if (!resultadoConciliacion) return null
+
+    const stats = resultadoConciliacion.estadisticas
+    const total = stats.totalSolicitudes + stats.totalRecibos + stats.totalMovimientos
+    const conciliados = stats.conciliadosCompletos + stats.conciliadosPorImporte
+    const porcentajeConciliado = total > 0 ? (conciliados / total) * 100 : 0
+
+    return {
+      ...stats,
+      total,
+      conciliados,
+      porcentajeConciliado,
+    }
+  }, [resultadoConciliacion])
 
   return (
     <div className="space-y-6 px-2">
@@ -379,7 +690,7 @@ export default function ConciliacionTransferencias() {
           <BarChart3 className="w-8 h-8" />
           Conciliación TR VALO
         </h1>
-        <p className="text-gray-600">Sistema de conciliación entre solicitudes, recibos y movimientos bancarios</p>
+        <p className="text-gray-600">Sistema de conciliación entre solicitudes, comprobantes y movimientos bancarios</p>
       </div>
 
       {/* Modal de Progreso */}
@@ -390,6 +701,33 @@ export default function ConciliacionTransferencias() {
         current={progressCurrent}
         total={progressTotal}
       />
+
+      {/* Modal para confirmar si archivo es CERA */}
+      <Dialog open={showCeraModal} onOpenChange={setShowCeraModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Configuración del Archivo Bancario</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-center">
+              <p className="text-sm text-gray-600 mb-4">
+                ¿El archivo que estás cargando es <strong>CERA</strong>?
+              </p>
+              <p className="text-xs text-gray-500 mb-6">
+                Los archivos CERA solo se concilian con comitentes que contengan "(CCE)" en su descripción.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-center">
+              <Button onClick={() => confirmarArchivoBancario(true)} className="bg-blue-600 hover:bg-blue-700">
+                ✅ Sí, es CERA
+              </Button>
+              <Button onClick={() => confirmarArchivoBancario(false)} variant="outline">
+                ❌ No, es Normal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Carga de Archivos */}
       <Card>
@@ -447,9 +785,9 @@ export default function ConciliacionTransferencias() {
               />
             </div>
 
-            {/* Recibos de Pago */}
+            {/* Comprobantes de Pago */}
             <div className="space-y-2">
-              <Label>Recibos de Pago *</Label>
+              <Label>Comprobantes de Pago *</Label>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => recibosInputRef.current?.click()} className="flex-1">
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -465,64 +803,99 @@ export default function ConciliacionTransferencias() {
                 ref={recibosInputRef}
                 type="file"
                 accept=".xlsx,.xls,.csv"
-                onChange={(e) => handleFileSelect(e, setArchivoRecibos, "Recibos")}
+                onChange={(e) => handleFileSelect(e, setArchivoRecibos, "Comprobantes")}
                 className="hidden"
               />
             </div>
+          </div>
+
+          {/* Movimientos Bancarios con soporte múltiple */}
+          <div className="border-t pt-4">
+            <h3 className="text-lg font-semibold mb-4">Movimientos Bancarios</h3>
 
             {/* Movimientos Bancarios Pesos */}
-            <div className="space-y-2">
-              <Label>Movimientos Bancarios Pesos *</Label>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => movimientosPesosInputRef.current?.click()} className="flex-1">
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  {archivoMovimientosPesos ? "Cambiar" : "Seleccionar"}
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-medium">Movimientos Bancarios Pesos *</Label>
+                <Button variant="outline" size="sm" onClick={() => movimientosPesosInputRef.current?.click()}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Archivo
                 </Button>
-                {archivoMovimientosPesos && (
-                  <Badge variant="outline" className="text-xs">
-                    {archivoMovimientosPesos.name}
-                  </Badge>
-                )}
               </div>
+
               <input
                 ref={movimientosPesosInputRef}
                 type="file"
                 accept=".xlsx,.xls,.csv"
-                onChange={(e) => handleFileSelect(e, setArchivoMovimientosPesos, "Movimientos Pesos")}
+                onChange={(e) => handleBankFileSelect(e, "pesos")}
                 className="hidden"
               />
+
+              {/* Lista de archivos de pesos */}
+              {archivosBancariosPesos.length > 0 && (
+                <div className="space-y-2">
+                  {archivosBancariosPesos.map((archivo) => (
+                    <div key={archivo.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                      <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm flex-1">{archivo.file.name}</span>
+                      <Badge variant={archivo.esCera ? "default" : "secondary"} className="text-xs">
+                        {archivo.esCera ? "CERA" : "Normal"}
+                      </Badge>
+                      <Button variant="ghost" size="sm" onClick={() => eliminarArchivoBancario(archivo.id, "pesos")}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Movimientos Bancarios USD */}
-            <div className="space-y-2">
-              <Label>Movimientos Bancarios USD</Label>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => movimientosUSDInputRef.current?.click()} className="flex-1">
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  {archivoMovimientosUSD ? "Cambiar" : "Seleccionar"}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-medium">Movimientos Bancarios USD</Label>
+                <Button variant="outline" size="sm" onClick={() => movimientosUSDInputRef.current?.click()}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Archivo
                 </Button>
-                {archivoMovimientosUSD && (
-                  <Badge variant="outline" className="text-xs">
-                    {archivoMovimientosUSD.name}
-                  </Badge>
-                )}
               </div>
+
               <input
                 ref={movimientosUSDInputRef}
                 type="file"
                 accept=".xlsx,.xls,.csv"
-                onChange={(e) => handleFileSelect(e, setArchivoMovimientosUSD, "Movimientos USD")}
+                onChange={(e) => handleBankFileSelect(e, "usd")}
                 className="hidden"
               />
+
+              {/* Lista de archivos USD */}
+              {archivosBancariosUSD.length > 0 && (
+                <div className="space-y-2">
+                  {archivosBancariosUSD.map((archivo) => (
+                    <div key={archivo.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                      <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                      <span className="text-sm flex-1">{archivo.file.name}</span>
+                      <Badge variant={archivo.esCera ? "default" : "secondary"} className="text-xs">
+                        {archivo.esCera ? "CERA" : "Normal"}
+                      </Badge>
+                      <Button variant="ghost" size="sm" onClick={() => eliminarArchivoBancario(archivo.id, "usd")}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Conciliación automática:</strong> El sistema realizará primero una conciliación completa (fecha +
-              CUIT + moneda + importe) y luego una conciliación automática por importe para los registros no
-              conciliados.
+              <strong>Nueva funcionalidad CERA:</strong> Los archivos marcados como CERA solo se concilian con
+              comitentes que contengan "(CCE)" en su descripción.
+              <br />
+              <strong>Múltiples archivos:</strong> Puede cargar varios archivos bancarios por moneda. Cada archivo puede
+              ser CERA o Normal.
               <br />
               <strong>Semáforo:</strong> 🟢 Verde = Conciliado completo, 🟡 Amarillo = Conciliado por importe, 🔴 Rojo =
               No conciliado
@@ -533,7 +906,11 @@ export default function ConciliacionTransferencias() {
             <Button
               onClick={procesarArchivos}
               disabled={
-                isProcessing || !archivoStatus || !archivoConfirmacion || !archivoRecibos || !archivoMovimientosPesos
+                isProcessing ||
+                !archivoStatus ||
+                !archivoConfirmacion ||
+                !archivoRecibos ||
+                archivosBancariosPesos.length === 0
               }
               className="bg-blue-600 hover:bg-blue-700"
             >
@@ -583,7 +960,7 @@ export default function ConciliacionTransferencias() {
                 <div className="text-2xl font-bold text-green-600">
                   {resultadoConciliacion.estadisticas.totalRecibos}
                 </div>
-                <div className="text-sm text-gray-500">Recibos</div>
+                <div className="text-sm text-gray-500">Comprobantes</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
@@ -657,6 +1034,7 @@ export default function ConciliacionTransferencias() {
                           <TableHead className="text-xs">CUIT</TableHead>
                           <TableHead className="text-xs">Moneda</TableHead>
                           <TableHead className="text-xs">Importe</TableHead>
+                          <TableHead className="text-xs">CCE</TableHead>
                           <TableHead className="text-xs">Estado</TableHead>
                           <TableHead className="text-xs">Ver</TableHead>
                         </TableRow>
@@ -664,11 +1042,20 @@ export default function ConciliacionTransferencias() {
                       <TableBody>
                         {solicitudesFiltradas.map((solicitud) => (
                           <TableRow key={solicitud.id} className={getColorPorTipo(solicitud.tipoConciliacion)}>
-                            <TableCell className="text-xs">{solicitud.fecha}</TableCell>
-                            <TableCell className="text-xs">{solicitud.comitenteNumero}</TableCell>
-                            <TableCell className="text-xs font-mono">{solicitud.cuit}</TableCell>
-                            <TableCell className="text-xs">{solicitud.moneda}</TableCell>
-                            <TableCell className="text-xs">{formatearNumero(solicitud.importe)}</TableCell>
+                            <TableCell className="text-xs">{solicitud.Fecha}</TableCell>
+                            <TableCell className="text-xs">{solicitud["Comitente (Número)"]}</TableCell>
+                            <TableCell className="text-xs font-mono">{solicitud.CUIT}</TableCell>
+                            <TableCell className="text-xs">{solicitud.Moneda || "$"}</TableCell>
+                            <TableCell className="text-xs">{formatearNumero(solicitud.Importe)}</TableCell>
+                            <TableCell className="text-xs">
+                              {solicitud.esCce ? (
+                                <Badge variant="outline" className="text-xs">
+                                  CCE
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
                             <TableCell>{getIconoPorTipo(solicitud.tipoConciliacion)}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(solicitud)}>
@@ -686,10 +1073,10 @@ export default function ConciliacionTransferencias() {
                 </CardContent>
               </Card>
 
-              {/* Tabla de Recibos de Pago */}
+              {/* Tabla de Comprobantes de Pago */}
               <Card className="min-w-80 flex-shrink-0">
                 <CardHeader>
-                  <CardTitle className="text-lg">Recibos de Pago</CardTitle>
+                  <CardTitle className="text-lg">Comprobantes de Pago</CardTitle>
                   <div className="flex gap-2">
                     <Select value={filtroRecibos} onValueChange={setFiltroRecibos}>
                       <SelectTrigger className="w-36">
@@ -723,6 +1110,7 @@ export default function ConciliacionTransferencias() {
                           <TableHead className="text-xs">CUIT</TableHead>
                           <TableHead className="text-xs">Moneda</TableHead>
                           <TableHead className="text-xs">Importe</TableHead>
+                          <TableHead className="text-xs">CCE</TableHead>
                           <TableHead className="text-xs">Estado</TableHead>
                           <TableHead className="text-xs">Ver</TableHead>
                         </TableRow>
@@ -730,11 +1118,20 @@ export default function ConciliacionTransferencias() {
                       <TableBody>
                         {recibosFiltrados.map((recibo) => (
                           <TableRow key={recibo.id} className={getColorPorTipo(recibo.tipoConciliacion)}>
-                            <TableCell className="text-xs">{recibo.fechaLiquidacion}</TableCell>
-                            <TableCell className="text-xs">{recibo.comitenteNumero}</TableCell>
-                            <TableCell className="text-xs font-mono">{recibo.cuit}</TableCell>
-                            <TableCell className="text-xs">{recibo.moneda || "$"}</TableCell>
-                            <TableCell className="text-xs">{formatearNumero(recibo.importe)}</TableCell>
+                            <TableCell className="text-xs">{recibo["Fecha Liquidación"]}</TableCell>
+                            <TableCell className="text-xs">{recibo["Comitente (Número)"]}</TableCell>
+                            <TableCell className="text-xs font-mono">{recibo.CUIT}</TableCell>
+                            <TableCell className="text-xs">{recibo.Moneda || "$"}</TableCell>
+                            <TableCell className="text-xs">{formatearNumero(recibo.Importe)}</TableCell>
+                            <TableCell className="text-xs">
+                              {recibo.esCce ? (
+                                <Badge variant="outline" className="text-xs">
+                                  CCE
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
                             <TableCell>{getIconoPorTipo(recibo.tipoConciliacion)}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(recibo)}>
@@ -747,7 +1144,7 @@ export default function ConciliacionTransferencias() {
                     </Table>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
-                    {recibosFiltrados.length} de {resultadoConciliacion.recibosPago.length} recibos
+                    {recibosFiltrados.length} de {resultadoConciliacion.recibosPago.length} comprobantes
                   </div>
                 </CardContent>
               </Card>
@@ -789,6 +1186,7 @@ export default function ConciliacionTransferencias() {
                           <TableHead className="text-xs">CUIT</TableHead>
                           <TableHead className="text-xs">Moneda</TableHead>
                           <TableHead className="text-xs">Importe</TableHead>
+                          <TableHead className="text-xs">CERA</TableHead>
                           <TableHead className="text-xs">Estado</TableHead>
                           <TableHead className="text-xs">Ver</TableHead>
                         </TableRow>
@@ -796,13 +1194,24 @@ export default function ConciliacionTransferencias() {
                       <TableBody>
                         {movimientosFiltrados.map((movimiento) => (
                           <TableRow key={movimiento.id} className={getColorPorTipo(movimiento.tipoConciliacion)}>
-                            <TableCell className="text-xs">{movimiento.fecha}</TableCell>
-                            <TableCell className="text-xs truncate max-w-28" title={movimiento.beneficiario}>
-                              {movimiento.beneficiario}
+                            <TableCell className="text-xs">{movimiento.Fecha}</TableCell>
+                            <TableCell className="text-xs truncate max-w-28" title={movimiento.Beneficiario}>
+                              {movimiento.Beneficiario}
                             </TableCell>
-                            <TableCell className="text-xs font-mono">{movimiento.cuit}</TableCell>
-                            <TableCell className="text-xs">{movimiento.moneda}</TableCell>
-                            <TableCell className="text-xs">{formatearNumero(movimiento.importe)}</TableCell>
+                            <TableCell className="text-xs font-mono">{movimiento.CUIT}</TableCell>
+                            <TableCell className="text-xs">{movimiento.Moneda || "$"}</TableCell>
+                            <TableCell className="text-xs">{formatearNumero(movimiento.Importe)}</TableCell>
+                            <TableCell className="text-xs">
+                              {movimiento.esCera ? (
+                                <Badge variant="default" className="text-xs">
+                                  CERA
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs">
+                                  Normal
+                                </Badge>
+                              )}
+                            </TableCell>
                             <TableCell>{getIconoPorTipo(movimiento.tipoConciliacion)}</TableCell>
                             <TableCell>
                               <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(movimiento)}>
@@ -843,21 +1252,35 @@ export default function ConciliacionTransferencias() {
                       <TableHead className="text-xs">D/C</TableHead>
                       <TableHead className="text-xs">Importe</TableHead>
                       <TableHead className="text-xs">Moneda</TableHead>
+                      <TableHead className="text-xs">CERA</TableHead>
                       <TableHead className="text-xs">Ver</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {resultadoConciliacion.transferenciasMonetarias.map((transferencia) => (
                       <TableRow key={transferencia.id}>
-                        <TableCell className="text-xs">{transferencia.fecha}</TableCell>
-                        <TableCell className="text-xs truncate max-w-28" title={transferencia.beneficiario}>
-                          {transferencia.beneficiario}
+                        <TableCell className="text-xs">{transferencia.Fecha}</TableCell>
+                        <TableCell className="text-xs truncate max-w-28" title={transferencia.Beneficiario}>
+                          {transferencia.Beneficiario}
                         </TableCell>
                         <TableCell className="text-xs">
-                          <Badge variant={transferencia.dc === "C" ? "default" : "secondary"}>{transferencia.dc}</Badge>
+                          <Badge variant={transferencia["D/C"] === "C" ? "default" : "secondary"}>
+                            {transferencia["D/C"]}
+                          </Badge>
                         </TableCell>
-                        <TableCell className="text-xs">{formatearNumero(transferencia.importe)}</TableCell>
-                        <TableCell className="text-xs">{transferencia.moneda}</TableCell>
+                        <TableCell className="text-xs">{formatearNumero(transferencia.Importe)}</TableCell>
+                        <TableCell className="text-xs">{transferencia.Moneda || "$"}</TableCell>
+                        <TableCell className="text-xs">
+                          {transferencia.esCera ? (
+                            <Badge variant="default" className="text-xs">
+                              CERA
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">
+                              Normal
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(transferencia)}>
                             <Eye className="w-4 h-4" />
@@ -890,21 +1313,33 @@ export default function ConciliacionTransferencias() {
                       <TableHead className="text-xs">D/C</TableHead>
                       <TableHead className="text-xs">Importe</TableHead>
                       <TableHead className="text-xs">Moneda</TableHead>
+                      <TableHead className="text-xs">CERA</TableHead>
                       <TableHead className="text-xs">Ver</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {resultadoConciliacion.movimientosMercados.map((mercado) => (
                       <TableRow key={mercado.id}>
-                        <TableCell className="text-xs">{mercado.fecha}</TableCell>
-                        <TableCell className="text-xs truncate max-w-28" title={mercado.beneficiario}>
-                          {mercado.beneficiario}
+                        <TableCell className="text-xs">{mercado.Fecha}</TableCell>
+                        <TableCell className="text-xs truncate max-w-28" title={mercado.Beneficiario}>
+                          {mercado.Beneficiario}
                         </TableCell>
                         <TableCell className="text-xs">
-                          <Badge variant={mercado.dc === "C" ? "default" : "secondary"}>{mercado.dc}</Badge>
+                          <Badge variant={mercado["D/C"] === "C" ? "default" : "secondary"}>{mercado["D/C"]}</Badge>
                         </TableCell>
-                        <TableCell className="text-xs">{formatearNumero(mercado.importe)}</TableCell>
-                        <TableCell className="text-xs">{mercado.moneda}</TableCell>
+                        <TableCell className="text-xs">{formatearNumero(mercado.Importe)}</TableCell>
+                        <TableCell className="text-xs">{mercado.Moneda || "$"}</TableCell>
+                        <TableCell className="text-xs">
+                          {mercado.esCera ? (
+                            <Badge variant="default" className="text-xs">
+                              CERA
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">
+                              Normal
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => mostrarDetalles(mercado)}>
                             <Eye className="w-4 h-4" />
@@ -937,9 +1372,9 @@ export default function ConciliacionTransferencias() {
                   <p className="text-sm text-gray-600">
                     {detallesSeleccionados.origen
                       ? `Solicitud (${detallesSeleccionados.origen})`
-                      : detallesSeleccionados.fechaLiquidacion
-                        ? "Recibo de Pago"
-                        : detallesSeleccionados.beneficiario
+                      : detallesSeleccionados["Fecha Liquidación"]
+                        ? "Comprobante de Pago"
+                        : detallesSeleccionados.Beneficiario
                           ? "Movimiento Bancario"
                           : "Registro"}
                   </p>
@@ -949,6 +1384,23 @@ export default function ConciliacionTransferencias() {
                   <p className="text-sm text-gray-600 font-mono">{detallesSeleccionados.id}</p>
                 </div>
               </div>
+
+              {/* Mostrar información CERA */}
+              {detallesSeleccionados.esCera !== undefined && (
+                <div className="border rounded-lg p-4 bg-blue-50">
+                  <h4 className="font-medium mb-3">Información CERA</h4>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={detallesSeleccionados.esCera ? "default" : "secondary"}>
+                      {detallesSeleccionados.esCera ? "CERA" : "Normal"}
+                    </Badge>
+                    <span className="text-sm text-gray-600">
+                      {detallesSeleccionados.esCera
+                        ? "Solo se concilia con comitentes (CCE)"
+                        : "Se concilia con comitentes normales"}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Estado de conciliación */}
               {detallesSeleccionados.tipoConciliacion && (
@@ -965,6 +1417,65 @@ export default function ConciliacionTransferencias() {
                 </div>
               )}
 
+              {/* Mostrar movimientos conciliados */}
+              {(detallesSeleccionados.movimientosConciliados?.length > 0 ||
+                detallesSeleccionados.conciliadoCon?.length > 0) && (
+                <div className="border rounded-lg p-4 bg-green-50">
+                  <h4 className="font-medium mb-3">
+                    {detallesSeleccionados.movimientosConciliados?.length > 0 ? "Conciliado con:" : "Conciliado por:"}
+                  </h4>
+                  <div className="space-y-2">
+                    {/* Si es solicitud/comprobante, mostrar movimientos */}
+                    {detallesSeleccionados.movimientosConciliados?.map((mov: any, index: number) => (
+                      <div key={index} className="text-sm bg-white p-2 rounded border">
+                        <div>
+                          <strong>Movimiento:</strong> {mov.id}
+                        </div>
+                        <div>
+                          <strong>Fecha:</strong> {mov.Fecha}
+                        </div>
+                        <div>
+                          <strong>Beneficiario:</strong> {mov.Beneficiario}
+                        </div>
+                        <div>
+                          <strong>CUIT:</strong> {mov.CUIT}
+                        </div>
+                        <div>
+                          <strong>Importe:</strong> {formatearNumero(mov.Importe)} {mov.Moneda}
+                        </div>
+                        <div>
+                          <strong>CERA:</strong> {mov.esCera ? "Sí" : "No"}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Si es movimiento, mostrar con qué se concilió */}
+                    {detallesSeleccionados.conciliadoCon?.map((item: any, index: number) => (
+                      <div key={index} className="text-sm bg-white p-2 rounded border">
+                        <div>
+                          <strong>Tipo:</strong> {item.origen ? `Solicitud (${item.origen})` : "Comprobante"}
+                        </div>
+                        <div>
+                          <strong>ID:</strong> {item.id}
+                        </div>
+                        <div>
+                          <strong>Fecha:</strong> {item.Fecha || item["Fecha Liquidación"]}
+                        </div>
+                        <div>
+                          <strong>CUIT:</strong> {item.CUIT}
+                        </div>
+                        <div>
+                          <strong>Importe:</strong> {formatearNumero(item.Importe)} {item.Moneda}
+                        </div>
+                        <div>
+                          <strong>CCE:</strong> {item.esCce ? "Sí" : "No"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Datos principales */}
               <div className="border rounded-lg p-4 bg-gray-50">
                 <h4 className="font-medium mb-3">Datos Principales</h4>
@@ -975,7 +1486,12 @@ export default function ConciliacionTransferencias() {
                         !key.includes("conciliado") &&
                         key !== "datosOriginales" &&
                         key !== "id" &&
-                        key !== "tipoConciliacion",
+                        key !== "tipoConciliacion" &&
+                        key !== "esCera" &&
+                        key !== "esCce" &&
+                        key !== "yaUtilizado" &&
+                        key !== "movimientosConciliados" &&
+                        key !== "conciliadoCon",
                     )
                     .map(([key, value]) => (
                       <div key={key}>
