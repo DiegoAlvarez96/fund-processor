@@ -1,105 +1,101 @@
-// Tipos base para los datos de entrada
-export interface StatusOrdenPago {
-  fechaConcertacion: string
-  comitenteNumero: string
-  comitenteDescripcion: string
-  moneda: string
-  importe: number
-  cuit: string
-  estado: string
-  especie: string
-  plazo: string
-  mercado: string
-  datosOriginales: Record<string, any>
-}
-
-export interface ConfirmacionSolicitud {
-  fecha: string
-  estado: string
-  comitenteNumero: string
-  comitenteDenominacion: string
-  monedaDescripcion: string
-  importe: number
-  cuit: string
-  datosOriginales: Record<string, any>
-}
-
-// Tipos para conciliación
+// Tipos de conciliación posibles
 export type TipoConciliacion = "completa" | "por-importe" | "no-conciliado"
 
-export interface SolicitudPago {
+// Interfaz para el resultado de la conciliación
+export interface ResultadoConciliacion {
+  solicitudesPago: any[]
+  recibosPago: any[]
+  movimientosBancarios: any[]
+  transferenciasMonetarias: any[]
+  movimientosMercados: any[]
+  estadisticas: {
+    totalSolicitudes: number
+    totalRecibos: number
+    totalMovimientos: number
+    conciliadosCompletos: number
+    conciliadosPorImporte: number
+    noConciliados: number
+  }
+}
+
+// Interfaz para registros con estado de conciliación
+export interface RegistroConConciliacion {
   id: string
-  fecha: string
-  comitenteNumero: string
-  comitenteDescripcion: string
-  moneda: string
-  importe: number
-  cuit: string
-  estado: string
+  tipoConciliacion: TipoConciliacion
+  CUIT: string
+  Fecha: string
+  Moneda: string
+  Importe: number
+  esCce?: boolean
+  esCera?: boolean
+  datosOriginales: any
+}
+
+// Interfaz para solicitudes de pago
+export interface SolicitudPago extends RegistroConConciliacion {
   origen: "status" | "confirmacion"
+  "Comitente (Número)": string
+  "Comitente (Denominación)": string
+  "Comitente (Descripción)": string
   conciliadoRecibos: boolean
   conciliadoMovimientos: boolean
   conciliadoRecibosPorImporte: boolean
   conciliadoMovimientosPorImporte: boolean
-  tipoConciliacion: TipoConciliacion
-  datosOriginales: Record<string, any>
+  movimientosConciliados?: any[]
 }
 
-export interface ReciboPago {
-  id: string
-  fechaLiquidacion: string
-  comitenteDenominacion: string
-  comitenteNumero: string
-  importe: number
-  cuit: string
-  moneda: string
+// Interfaz para comprobantes de pago
+export interface ComprobantePago extends RegistroConConciliacion {
+  origen: "recibos"
+  "Fecha Liquidación": string
+  "Comitente (Número)": string
+  "Comitente (Denominación)": string
+  "CUIT/CUIL titular de la cuenta": string
   conciliadoSolicitudes: boolean
   conciliadoMovimientos: boolean
   conciliadoSolicitudesPorImporte: boolean
   conciliadoMovimientosPorImporte: boolean
-  tipoConciliacion: TipoConciliacion
-  datosOriginales: Record<string, any>
+  movimientosConciliados?: any[]
 }
 
-export interface MovimientoBancario {
-  id: string
-  fecha: string
-  beneficiario: string
-  cuit: string
-  dc: string
-  importe: number
-  moneda: string
+// Interfaz para movimientos bancarios
+export interface MovimientoBancario extends RegistroConConciliacion {
+  Beneficiario: string
+  "D/C": string
   conciliadoSolicitudes: boolean
   conciliadoRecibos: boolean
   conciliadoSolicitudesPorImporte: boolean
   conciliadoRecibosPorImporte: boolean
-  tipoConciliacion: TipoConciliacion
-  datosOriginales: Record<string, any>
+  conciliadoCon?: any[]
 }
 
+// Interfaz para transferencias monetarias
 export interface TransferenciaMonetaria {
   id: string
-  fecha: string
-  beneficiario: string
-  cuit: string
-  dc: string
-  importe: number
-  moneda: string
-  datosOriginales: Record<string, any>
+  Fecha: string
+  Beneficiario: string
+  CUIT: string
+  "D/C": string
+  Importe: number
+  Moneda: string
+  esCera: boolean
+  datosOriginales: any
 }
 
+// Interfaz para movimientos de mercados
 export interface MovimientoMercado {
   id: string
-  fecha: string
-  beneficiario: string
-  cuit: string
-  dc: string
-  importe: number
-  moneda: string
-  datosOriginales: Record<string, any>
+  Fecha: string
+  Beneficiario: string
+  CUIT: string
+  "D/C": string
+  Importe: number
+  Moneda: string
+  esCera: boolean
+  datosOriginales: any
 }
 
-// Tipos para estadísticas y resultados
+// Interfaz para estadísticas de conciliación
 export interface EstadisticasConciliacion {
   totalSolicitudes: number
   totalRecibos: number
@@ -107,38 +103,32 @@ export interface EstadisticasConciliacion {
   conciliadosCompletos: number
   conciliadosPorImporte: number
   noConciliados: number
+  porcentajeConciliado: number
 }
 
-export interface ResultadoConciliacion {
-  solicitudesPago: SolicitudPago[]
-  recibosPago: ReciboPago[]
-  movimientosBancarios: MovimientoBancario[]
-  transferenciasMonetarias: TransferenciaMonetaria[]
-  movimientosMercados: MovimientoMercado[]
-  estadisticas: EstadisticasConciliacion
+// Interfaz para archivos bancarios con información CERA
+export interface ArchivoBancario {
+  file: File
+  esCera: boolean
+  id: string
 }
 
-// Tipos para resumen de exportación
-export interface ResumenItem {
-  cantidad: number
-  importeTotal: number
-  conciliados: number
-  conciliadosPorImporte: number
-  noConciliados: number
+// Interfaz para configuración de conciliación
+export interface ConfiguracionConciliacion {
+  validarCera: boolean
+  toleranciaImporte: number
+  incluirTransferencias: boolean
+  incluirMercados: boolean
 }
 
-export interface DiferenciaItem {
-  cantidad: number
-  importe: number
-}
+// Tipos para filtros de tablas
+export type FiltroEstado = "todos" | "completos" | "por-importe" | "no-conciliados"
 
-export interface ResumenConciliacion {
-  solicitudes: ResumenItem
-  recibos: ResumenItem
-  movimientos: ResumenItem
-  diferencias: {
-    solicitudesVsRecibos: DiferenciaItem
-    solicitudesVsMovimientos: DiferenciaItem
-    recibosVsMovimientos: DiferenciaItem
-  }
+// Interfaz para parámetros de búsqueda
+export interface ParametrosBusqueda {
+  termino: string
+  filtroEstado: FiltroEstado
+  fechaDesde?: string
+  fechaHasta?: string
+  moneda?: string
 }
