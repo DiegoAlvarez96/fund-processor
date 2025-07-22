@@ -21,21 +21,21 @@ function calcularResumen(resultado: ResultadoConciliacion): ResumenConciliacion 
   return {
     solicitudes: {
       cantidad: resultado.solicitudesPago.length,
-      importeTotal: resultado.solicitudesPago.reduce((sum, s) => sum + s.importe, 0),
+      importeTotal: resultado.solicitudesPago.reduce((sum, s) => sum + (s.Importe || 0), 0),
       conciliados: solicitudesCompletas.length,
       conciliadosPorImporte: solicitudesPorImporte.length,
       noConciliados: solicitudesNoConciliadas.length,
     },
     recibos: {
       cantidad: resultado.recibosPago.length,
-      importeTotal: resultado.recibosPago.reduce((sum, r) => sum + r.importe, 0),
+      importeTotal: resultado.recibosPago.reduce((sum, r) => sum + (r.Importe || 0), 0),
       conciliados: recibosCompletos.length,
       conciliadosPorImporte: recibosPorImporte.length,
       noConciliados: recibosNoConciliados.length,
     },
     movimientos: {
       cantidad: resultado.movimientosBancarios.length,
-      importeTotal: resultado.movimientosBancarios.reduce((sum, m) => sum + m.importe, 0),
+      importeTotal: resultado.movimientosBancarios.reduce((sum, m) => sum + (m.Importe || 0), 0),
       conciliados: movimientosCompletos.length,
       conciliadosPorImporte: movimientosPorImporte.length,
       noConciliados: movimientosNoConciliados.length,
@@ -44,20 +44,20 @@ function calcularResumen(resultado: ResultadoConciliacion): ResumenConciliacion 
       solicitudesVsRecibos: {
         cantidad: resultado.solicitudesPago.length - resultado.recibosPago.length,
         importe:
-          resultado.solicitudesPago.reduce((sum, s) => sum + s.importe, 0) -
-          resultado.recibosPago.reduce((sum, r) => sum + r.importe, 0),
+          resultado.solicitudesPago.reduce((sum, s) => sum + (s.Importe || 0), 0) -
+          resultado.recibosPago.reduce((sum, r) => sum + (r.Importe || 0), 0),
       },
       solicitudesVsMovimientos: {
         cantidad: resultado.solicitudesPago.length - resultado.movimientosBancarios.length,
         importe:
-          resultado.solicitudesPago.reduce((sum, s) => sum + s.importe, 0) -
-          resultado.movimientosBancarios.reduce((sum, m) => sum + m.importe, 0),
+          resultado.solicitudesPago.reduce((sum, s) => sum + (s.Importe || 0), 0) -
+          resultado.movimientosBancarios.reduce((sum, m) => sum + (m.Importe || 0), 0),
       },
       recibosVsMovimientos: {
         cantidad: resultado.recibosPago.length - resultado.movimientosBancarios.length,
         importe:
-          resultado.recibosPago.reduce((sum, r) => sum + r.importe, 0) -
-          resultado.movimientosBancarios.reduce((sum, m) => sum + m.importe, 0),
+          resultado.recibosPago.reduce((sum, r) => sum + (r.Importe || 0), 0) -
+          resultado.movimientosBancarios.reduce((sum, m) => sum + (m.Importe || 0), 0),
       },
     },
   }
@@ -73,7 +73,7 @@ function formatearNumero(numero: number): string {
 
 // Función para crear hoja de resumen con diseño profesional
 function crearHojaResumen(resumen: ResumenConciliacion, resultado: ResultadoConciliacion): any[][] {
-  const porcentajeSolicitudesCompletas = (
+  const porcentajeSolicitudesCompletos = (
     (resumen.solicitudes.conciliados / resumen.solicitudes.cantidad) *
     100
   ).toFixed(1)
@@ -127,7 +127,7 @@ function crearHojaResumen(resumen: ResumenConciliacion, resultado: ResultadoConc
       resumen.solicitudes.conciliados,
       resumen.solicitudes.conciliadosPorImporte,
       resumen.solicitudes.noConciliados,
-      `${porcentajeSolicitudesCompletas}%`,
+      `${porcentajeSolicitudesCompletos}%`,
       `${porcentajeSolicitudesPorImporte}%`,
       "",
     ],
@@ -268,13 +268,13 @@ function crearHojaSolicitudes(solicitudes: any[]): any[][] {
 
   const filas = solicitudes.map((solicitud) => [
     solicitud.id,
-    solicitud.fecha,
-    solicitud.comitenteNumero,
-    solicitud.comitenteDescripcion,
-    solicitud.cuit,
-    solicitud.moneda,
-    solicitud.importe,
-    solicitud.estado,
+    solicitud.Fecha,
+    solicitud["Comitente (Número)"],
+    solicitud["Comitente (Denominación)"] || solicitud["Comitente (Descripción)"],
+    solicitud.CUIT,
+    solicitud.Moneda || "$",
+    solicitud.Importe,
+    solicitud.Estado,
     solicitud.origen,
     solicitud.conciliadoRecibos ? "SÍ" : "NO",
     solicitud.conciliadoMovimientos ? "SÍ" : "NO",
@@ -309,12 +309,12 @@ function crearHojaRecibos(recibos: any[]): any[][] {
 
   const filas = recibos.map((recibo) => [
     recibo.id,
-    recibo.fechaLiquidacion,
-    recibo.comitenteNumero,
-    recibo.comitenteDenominacion,
-    recibo.cuit,
-    recibo.moneda || "$",
-    recibo.importe,
+    recibo["Fecha Liquidación"],
+    recibo["Comitente (Número)"],
+    recibo["Comitente (Denominación)"],
+    recibo.CUIT,
+    recibo.Moneda || "$",
+    recibo.Importe,
     recibo.conciliadoSolicitudes ? "SÍ" : "NO",
     recibo.conciliadoMovimientos ? "SÍ" : "NO",
     recibo.conciliadoSolicitudesPorImporte ? "SÍ" : "NO",
@@ -348,12 +348,12 @@ function crearHojaMovimientos(movimientos: any[]): any[][] {
 
   const filas = movimientos.map((movimiento) => [
     movimiento.id,
-    movimiento.fecha,
-    movimiento.beneficiario,
-    movimiento.cuit,
-    movimiento.dc,
-    movimiento.moneda,
-    movimiento.importe,
+    movimiento.Fecha,
+    movimiento.Beneficiario,
+    movimiento.CUIT,
+    movimiento["D/C"],
+    movimiento.Moneda || "$",
+    movimiento.Importe,
     movimiento.conciliadoSolicitudes ? "SÍ" : "NO",
     movimiento.conciliadoRecibos ? "SÍ" : "NO",
     movimiento.conciliadoSolicitudesPorImporte ? "SÍ" : "NO",
@@ -374,12 +374,12 @@ function crearHojaTransferencias(transferencias: any[]): any[][] {
 
   const filas = transferencias.map((transferencia) => [
     transferencia.id,
-    transferencia.fecha,
-    transferencia.beneficiario,
-    transferencia.cuit,
-    transferencia.dc,
-    transferencia.moneda,
-    transferencia.importe,
+    transferencia.Fecha,
+    transferencia.Beneficiario,
+    transferencia.CUIT,
+    transferencia["D/C"],
+    transferencia.Moneda || "$",
+    transferencia.Importe,
   ])
 
   return [headers, ...filas]
@@ -391,12 +391,12 @@ function crearHojaMercados(mercados: any[]): any[][] {
 
   const filas = mercados.map((mercado) => [
     mercado.id,
-    mercado.fecha,
-    mercado.beneficiario,
-    mercado.cuit,
-    mercado.dc,
-    mercado.moneda,
-    mercado.importe,
+    mercado.Fecha,
+    mercado.Beneficiario,
+    mercado.CUIT,
+    mercado["D/C"],
+    mercado.Moneda || "$",
+    mercado.Importe,
   ])
 
   return [headers, ...filas]
@@ -493,8 +493,32 @@ export function exportarConciliacionExcel(resultado: ResultadoConciliacion): voi
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, "").replace("T", "_")
   const nombreArchivo = `Conciliacion_TR_VALO_${timestamp}.xlsx`
 
-  // Escribir archivo
-  XLSX.writeFile(workbook, nombreArchivo)
+  // --- Generar archivo en memoria y descargar en navegador ---
+  try {
+    // Crear un ArrayBuffer con el libro de trabajo
+    const wbArray: ArrayBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+    })
 
-  console.log(`✅ Archivo Excel exportado: ${nombreArchivo}`)
+    // Generar Blob y URL temporal
+    const blob = new Blob([wbArray], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    })
+    const url = URL.createObjectURL(blob)
+
+    // Forzar la descarga mediante un enlace temporal
+    const link = document.createElement("a")
+    link.href = url
+    link.download = nombreArchivo
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    console.log(`✅ Archivo Excel exportado: ${nombreArchivo}`)
+  } catch (err) {
+    console.error("❌ Error exportando Excel:", err)
+    throw err
+  }
 }
