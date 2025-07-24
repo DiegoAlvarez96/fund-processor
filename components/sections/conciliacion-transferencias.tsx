@@ -718,11 +718,11 @@ export default function ConciliacionTransferencias() {
               </p>
             </div>
             <div className="flex gap-3 justify-center">
-              <Button onClick={() => confirmarArchivoBancario(true)} className="bg-blue-600 hover:bg-blue-700">
-                ✅ Sí, es CERA
+              <Button onClick={() => confirmarArchivoBancario(false)} className="bg-blue-600 hover:bg-blue-700">
+                ✅ Es Normal
               </Button>
-              <Button onClick={() => confirmarArchivoBancario(false)} variant="outline">
-                ❌ No, es Normal
+              <Button onClick={() => confirmarArchivoBancario(true)} variant="outline">
+                ❌ Es CERA
               </Button>
             </div>
           </div>
