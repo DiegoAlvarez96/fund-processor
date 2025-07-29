@@ -151,6 +151,7 @@ const FCI_DICT: Record<string, string> = {
   "123": "ALYP FCI B",
   "138": "BAL15 FCI A",
   "139": "BAL15 FCI B",
+  "140": "AP FCI H1",
 }
 
 const USERS = ["adcap", "adcap_99", "adcap_1000"]
