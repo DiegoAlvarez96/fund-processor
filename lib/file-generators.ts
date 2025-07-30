@@ -347,9 +347,6 @@ export function generateBindEcheckFile(echecks: EcheckData[]): string {
       "NO",
       "1",
       echeck.fechaPago
-          .split("-")
-          .reverse()
-          .join("/"), // fecha en formato DD/MM/YYYY
       "A la orden",
       "SI",
       "VAR",
