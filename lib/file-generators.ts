@@ -346,7 +346,7 @@ export function generateBindEcheckFile(echecks: EcheckData[]): string {
       echeck.importe.toFixed(2),
       "NO",
       "1",
-      echeck.fechaPago
+      echeck.fechaPago,
       "A la orden",
       "SI",
       "VAR",
