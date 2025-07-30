@@ -340,16 +340,19 @@ export function generateComercioEcheckFile(echecks: EcheckData[]): string {
 export function generateBindEcheckFile(echecks: EcheckData[]): string {
   const header =
     "CUIT del Beneficiario;Importe;Multi_Echeq;Cantidad;Fecha de pago;Caracter;Cruzado;Concepto;Descripción del Echeq"
+  const fecha = new Date(echeck.fechaPago); 
+    const dia = String(fecha.getDate()).padStart(2, "0");
+    const mes = String(fecha.getMonth() + 1).padStart(2, "0"); // Mes base 0
+    const anio = fecha.getFullYear();
+    const fechaFormateada = `${dia}/${mes}/${anio}`;
+  
   const lines = echecks.map((echeck) =>
     [
       echeck.cuitBeneficiario,
       echeck.importe.toFixed(2),
       "NO",
       "1",
-      echeck.fechaPago
-          .split("-")
-          .reverse()
-          .join("/"), // fecha en formato DD/MM/YYYY
+      fechaFormateada,
       "A la orden",
       "SI",
       "VAR",
