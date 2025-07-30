@@ -354,6 +354,8 @@ export function generateBindEcheckFile(echecks: EcheckData[]): string {
     ].join(";"),
   )
 
+  return [header, ...lines].join("\n")
+}
 // Función principal para generar archivos
 export function generateBankFile(
   banco: string,
