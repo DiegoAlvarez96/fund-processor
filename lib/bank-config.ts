@@ -155,7 +155,7 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
         "descripcion",
       ],
       separator: ";",
-      dateFormat: "DD/M/YYYY",
+      dateFormat: "DD/MM/YYYY",
     },
   },
 }
