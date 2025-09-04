@@ -1,12 +1,6 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a/app/api/process-transaction/route.ts b/app/api/process-transaction/route.ts
-index ae3347a8459a134aa1a54bc0dbdfc3768d0beda0..56b5e1c86bf39b4415177d77e8c9dd61a83172fd 100644
---- a/app/api/process-transaction/route.ts
-+++ b/app/api/process-transaction/route.ts
-@@ -1,127 +1,136 @@
  import { type NextRequest, NextResponse } from "next/server"
-+import fs from "fs"
-+import https from "https"
+ import fs from "fs"
+ import https from "https"
  
  const PASSWORDS: Record<string, string> = {
    adcap: process.env.PASS_ADCAP!,
@@ -14,10 +8,10 @@ index ae3347a8459a134aa1a54bc0dbdfc3768d0beda0..56b5e1c86bf39b4415177d77e8c9dd61
    adcap_1000: process.env.PASS_ADCAP_1000!,
  }
  
-+const httpsAgent = new https.Agent({
-+  ca: fs.readFileSync(process.env.ADCAP_CA_CERT_PATH!, "utf8"),
-+})
-+
+ const httpsAgent = new https.Agent({
+   ca: fs.readFileSync(process.env.ADCAP_CA_CERT_PATH!, "utf8"),
+ })
+ 
  
  async function getToken(user: string): Promise<string | null> {
    if (!PASSWORDS[user]) {
@@ -33,7 +27,7 @@ index ae3347a8459a134aa1a54bc0dbdfc3768d0beda0..56b5e1c86bf39b4415177d77e8c9dd61
        method: "POST",
        headers: { "Content-Type": "application/json" },
        body: JSON.stringify(payload),
-+      agent: httpsAgent,
+       agent: httpsAgent,
      })
  
      if (!response.ok) {
@@ -65,7 +59,7 @@ index ae3347a8459a134aa1a54bc0dbdfc3768d0beda0..56b5e1c86bf39b4415177d77e8c9dd61
      method: "POST",
      headers,
      body: JSON.stringify(payload),
-+    agent: httpsAgent,
+     agent: httpsAgent,
    })
  
    if (!response.ok) {
@@ -114,7 +108,7 @@ index ae3347a8459a134aa1a54bc0dbdfc3768d0beda0..56b5e1c86bf39b4415177d77e8c9dd61
      method: "POST",
      headers,
      body: JSON.stringify(payload),
-+    agent: httpsAgent,
+     agent: httpsAgent,
    })
  
    if (!response.ok) {
