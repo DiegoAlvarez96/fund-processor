@@ -134,4 +134,6 @@
      if (!token) {
        return NextResponse.json({
          success: false,
-
+ 
+EOF
+)
