@@ -122,18 +122,55 @@
  
  
  
- export async function POST(request: NextRequest) {
- 
-   
-   try {
-     const transaction = await request.json()
-     const { cuotapartista, tipo, fci, importe, cantidad, fechaConcertacion, fechaLiquidacion } = transaction
- 
-     // Obtener token
-     const token = await getToken(cuotapartista)
-     if (!token) {
-       return NextResponse.json({
-         success: false,
- 
-EOF
-)
+export async function POST(request: NextRequest) {
+  try {
+    const transaction = await request.json();
+    const {
+      cuotapartista,
+      tipo,
+      fci,
+      importe,
+      cantidad,
+      fechaConcertacion,
+      fechaLiquidacion,
+    } = transaction;
+
+    // Obtener token
+    const token = await getToken(cuotapartista);
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: 'Missing token' },
+        { status: 401 }
+      );
+    }
+
+    if (tipo === 'suscripcion') {
+      const result = await suscribir(token, fci, importe, cuotapartista);
+      return NextResponse.json({ success: true, data: result });
+    }
+
+    if (tipo === 'rescate') {
+      const result = await rescatar(
+        token,
+        fci,
+        importe,
+        cantidad,
+        cuotapartista,
+        fechaConcertacion,
+        fechaLiquidacion
+      );
+      return NextResponse.json({ success: true, data: result });
+    }
+
+    return NextResponse.json(
+      { success: false, error: 'Tipo de transacción inválido' },
+      { status: 400 }
+    );
+  } catch (error: any) {
+    console.error('Error procesando transacción:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Error interno del servidor' },
+      { status: 500 }
+    );
+  }
+}
