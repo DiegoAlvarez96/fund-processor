@@ -1,12 +1,6 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a/app/api/delete-request/route.ts b/app/api/delete-request/route.ts
-index dede68ecfc27b007834797c4eb9d4b0c1bfd075a..1659e73341f61886b61d6855333329572c1b9c4b 100644
---- a/app/api/delete-request/route.ts
-+++ b/app/api/delete-request/route.ts
-@@ -1,84 +1,92 @@
  import { type NextRequest, NextResponse } from "next/server"
-+import fs from "fs"
-+import https from "https"
+ import fs from "fs"
+ import https from "https"
  
  const PASSWORDS: Record<string, string> = {
    adcap: process.env.PASS_ADCAP!,
@@ -14,10 +8,10 @@ index dede68ecfc27b007834797c4eb9d4b0c1bfd075a..1659e73341f61886b61d685533332957
    adcap_1000: process.env.PASS_ADCAP_1000!,
  }
  
-+const httpsAgent = new https.Agent({
-+  ca: fs.readFileSync(process.env.ADCAP_CA_CERT_PATH!, "utf8"),
-+})
-+
+ const httpsAgent = new https.Agent({
+   ca: fs.readFileSync(process.env.ADCAP_CA_CERT_PATH!, "utf8"),
+ })
+ 
  async function getToken(user: string): Promise<string | null> {
    if (!PASSWORDS[user]) {
      return null
@@ -31,7 +25,7 @@ index dede68ecfc27b007834797c4eb9d4b0c1bfd075a..1659e73341f61886b61d685533332957
        method: "POST",
        headers: { "Content-Type": "application/json" },
        body: JSON.stringify(payload),
-+      agent: httpsAgent,
+       agent: httpsAgent,
      })
  
      if (!response.ok) {
@@ -73,7 +67,7 @@ index dede68ecfc27b007834797c4eb9d4b0c1bfd075a..1659e73341f61886b61d685533332957
        headers: {
          Authorization: `Bearer ${token}`,
        },
-+      agent: httpsAgent,
+       agent: httpsAgent,
      })
  
      if (!response.ok) {
@@ -96,6 +90,3 @@ index dede68ecfc27b007834797c4eb9d4b0c1bfd075a..1659e73341f61886b61d685533332957
      })
    }
  }
- 
-EOF
-)
