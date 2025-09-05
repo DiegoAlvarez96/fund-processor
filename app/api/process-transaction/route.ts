@@ -144,12 +144,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (tipo === 'suscripcion') {
+    if (tipo === 'SUSC') {
       const result = await suscribir(token, fci, importe, cuotapartista);
       return NextResponse.json({ success: true, data: result });
     }
 
-    if (tipo === 'rescate') {
+    if (tipo === 'RESC') {
       const result = await rescatar(
         token,
         fci,
