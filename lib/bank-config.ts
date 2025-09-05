@@ -161,27 +161,56 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
 }
 
 // CBUs precargados con CUIT asociado
+
+const adcapCbus = [
+  { value: "2990000000002201050000", label: "2990000000002201050000 - Adcap Abierto Pymes", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002201740008", label: "2990000000002201740008 - Adcap Acciones", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002506410002", label: "2990000000002506410002 - Adcap Ahorro Dinámico Fondo de Dinero", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000015072580211", label: "2990000000015072580211 - Adcap Ahorro Dolares", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002293790008", label: "2990000000002293790008 - Adcap Ahorro Pesos", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002293790008", label: "2990000000002293790008 - Adcap Ahorro Pesos Fondo de Dinero", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002592800000", label: "2990000000002592800000 - Adcap Balance Multiactivo", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002450030006", label: "2990000000002450030006 - Adcap Balanceado IV", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002638870004", label: "2990000000002638870004 - Adcap Balanceado IX", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002479930006", label: "2990000000002479930006 - Adcap Balanceado V", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002638010002", label: "2990000000002638010002 - Adcap Balanceado VII", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002506340008", label: "2990000000002506340008 - Adcap Balanceado X", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002506270004", label: "2990000000002506270004 - Adcap Balanceado XII", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002202590008", label: "2990000000002202590008 - Adcap Balanceado XIII", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002638180006", label: "2990000000002638180006 - Adcap Balanceado XV", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002592660002", label: "2990000000002592660002 - Adcap Balanceado XVI", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002592730006", label: "2990000000002592730006 - Adcap Balanceado XVII", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002638560002", label: "2990000000002638560002 - Adcap Balanceado XX", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002450270004", label: "2990000000002450270004 - Adcap Capital Growth", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002333270004", label: "2990000000002333270004 - Adcap Cobertura", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002498380006", label: "2990000000002498380006 - Adcap Desarrollo e Infraestructura", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002506410002", label: "2990000000002506410002 - Adcap Dinamico", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002201500000", label: "2990000000002201500000 - Adcap Moneda", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002592800000", label: "2990000000002592800000 - Adcap Multiactivo", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002506650000", label: "2990000000002506650000 - Adcap Multistrategy", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002202730006", label: "2990000000002202730006 - Adcap Pesos Plus", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002201050000", label: "2990000000002201050000 - Adcap Pymes", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000015072410217", label: "2990000000015072410217 - Adcap Renta Dolar", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002193610002", label: "2990000000002193610002 - Adcap Renta Fija", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002455770004", label: "2990000000002455770004 - Adcap S&C Renta Corporativa Corto Plazo Abierto Pymes", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002576730006", label: "2990000000002576730006 - Adcap Verde y Sustentable ASG", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002450270004", label: "2990000000002450270004 - Adcap Wise Capital Growth", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002547040008", label: "2990000000002547040008 - Adcap Wise Capital Hedge", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002506650000", label: "2990000000002506650000 - Adcap Wise Capital Multistrategy", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000002416430006", label: "2990000000002416430006 - Alycbur FCI Abierto Pymes", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+  { value: "2990000000016195110217", label: "2990000000016195110217 - IOL Dolar Ahorro Plus", cuit: "30604731018", nombre: "BCSD ADCAP FCI" },
+];
+
+
+
+
 export const CBU_PRESETS: Record<
   string,
   Record<string, Array<{ value: string; label: string; cuit: string; nombre: string }>>
 > = {
   "MEP-GC1": {
-    "banco-valores": [
-      {
-        value: "2990000000002293790008",
-        label: "2990000000002293790008 - AHORRO PESOS",
-        cuit: "30604731018",
-        nombre: "BCSD ADCAP FCI",
-      },
-    ],
-    "banco-comafi": [
-      {
-        value: "2990000000002293790008",
-        label: "2990000000002293790008 - AHORRO PESOS",
-        cuit: "30604731018",
-        nombre: "BCSD ADCAP FCI",
-      },
-    ],
+    "banco-valores": adcapCbus,
+    "banco-comafi": adcapCbus, // reutiliza la misma lista si aplica
   },
   "MEP-DL0": {
     "banco-valores": [
