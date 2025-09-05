@@ -146,7 +146,14 @@ export async function POST(request: NextRequest) {
 
     if (tipo === 'SUSC') {
       const result = await suscribir(token, fci, importe, cuotapartista);
-      return NextResponse.json({ success: true, data: result });
+      const { mutual_fund_request_id, description } = result;
+
+      return NextResponse.json({
+        success: true,
+        // Mostrar “mutual_fund_request_id + description”
+        description: `${mutual_fund_request_id} ${description}`,
+        data: result
+      });
     }
 
     if (tipo === 'RESC') {
@@ -159,7 +166,14 @@ export async function POST(request: NextRequest) {
         fechaConcertacion,
         fechaLiquidacion
       );
-      return NextResponse.json({ success: true, data: result });
+      const { mutual_fund_request_id, description } = result;
+
+      return NextResponse.json({
+        success: true,
+        // Mostrar “mutual_fund_request_id + description”
+        description: `${mutual_fund_request_id} ${description}`,
+        data: result
+      });
     }
 
     return NextResponse.json(
