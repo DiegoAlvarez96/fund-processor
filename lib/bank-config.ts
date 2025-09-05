@@ -328,7 +328,7 @@ export function getCuitByCBU(
 export const CUENTAS_ORIGEN_POR_BANCO: Record<string, Array<{ value: string; label: string }>> = {
   "banco-valores": [
     { value: "300100000110343", label: "VALO OPERATIVA PESOS - 300100000110343" },
-    { value: "900100000163333", label: "VALO OPERATIVA USD - 900100000163333" },
+    { value: "900100000110633", label: "VALO OPERATIVA USD - 900100000110633" },
     { value: "300100000134934", label: "VALO ACDI PESOS - 300100000134934" },
     { value: "900100000134941", label: "VALO ACDI USD - 900100000134941" },
   ],
@@ -338,7 +338,7 @@ export const CUENTAS_ORIGEN_POR_BANCO: Record<string, Array<{ value: string; lab
 // Cuentas origen disponibles (mantener para compatibilidad)
 export const CUENTAS_ORIGEN = [
   { value: "300100000110343", label: "VALO OPERATIVA PESOS - 300100000110343" },
-  { value: "900100000163333", label: "VALO OPERATIVA USD - 900100000163333" },
+  { value: "900100000110633", label: "VALO OPERATIVA USD - 900100000110633" },
   { value: "300100000134934", label: "VALO ACDI PESOS - 300100000134934" },
   { value: "900100000134941", label: "VALO ACDI USD - 900100000134941" },
   { value: "2990000000002307000000", label: "COMAFI PESOS 23070" },
