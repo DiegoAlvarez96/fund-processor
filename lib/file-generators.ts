@@ -7,6 +7,10 @@ export interface TransferData {
   montoMaximo: number
   tipoTransferencia: string
   banco: string
+  documentoBeneficiario?: string
+  destinatario?: string
+  fechaPago?: string
+  informacionAdicional?: string
 }
 
 export interface EcheckData {
@@ -57,6 +61,56 @@ export function fractionateTransfers(data: TransferData): Array<{
   return transfers
 }
 
+// Generar archivo de transferencias inmediatas para Comafi
+export function generateComafiInmediataFile(transfers: Array<any>, data: TransferData): string {
+  const total = transfers.reduce((sum, t) => sum + t.importe, 0)
+
+  const lines: string[] = []
+  lines.push(
+    "TIPO;CANTIDAD;DOCUMENTO_BENEFICIARIO;DESTINATARIO;IMPORTE;FECHA_PAGO;CUENTA_CREDITO;CBU_CREDITO;INFORMACION_ADICIONAL;EMAIL;TEXTO_EMAIL;TIPO_CUENTA_CREDITO;CONCEPTO",
+  )
+
+  lines.push(
+    [
+      "H",
+      transfers.length.toString(),
+      "",
+      "",
+      total.toFixed(2),
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ].join(";"),
+  )
+
+  transfers.forEach((transfer) => {
+    lines.push(
+      [
+        "R",
+        "",
+        data.documentoBeneficiario || "",
+        data.destinatario || "",
+        transfer.importe.toFixed(2),
+        data.fechaPago || "",
+        "",
+        transfer.cbuDestino,
+        data.informacionAdicional || "",
+        "tesoreria@ad-cap.com.ar",
+        "pago proveedor",
+        "",
+        "VAR",
+      ].join(";"),
+    )
+  })
+
+  return lines.join("\n")
+}
+
 // Generar archivo de transferencias inmediatas para Banco de Valores
 export function generateValoresInmediataFile(transfers: Array<any>, data: TransferData): string {
   // Obtener CUIT del CBU destino
@@ -101,7 +155,7 @@ export function generateValoresMismoBancoFile(transfers: Array<any>, data: Trans
         transfer.importe.toFixed(2), // Importe
         "CPD", // Concepto fijo
         observaciones, // Observaciones según destino
-      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+      ].join(";") + ";\r\n"
     )
   })
 
@@ -132,7 +186,7 @@ export function generateValoresD20File(transfers: Array<any>, data: TransferData
         "1", // Campo fijo
         "S0", // Campo fijo
         transfer.cbuDestino, // ✅ Cuenta destino (no importe)
-      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+      ].join(";") + ";\r\n"
     )
   })
 
@@ -162,7 +216,7 @@ export function generateValoresDL0File(transfers: Array<any>, data: TransferData
         "S", // Campo fijo
         "S", // Campo fijo
         "FONDEO", // Concepto fijo
-      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+      ].join(";") + ";\r\n"
     )
   })
 
@@ -199,7 +253,7 @@ export function generateValoresTransferFile(
         "TRANSFERENCIA AUTOMATICA", // Concepto
         "01", // Campo fijo
         "T", // Campo fijo (removido el ; extra)
-      ].join(";") + ";\r\n" // ✅ Añadir ;\r\n al final de cada línea
+      ].join(";") + ";\r\n"
     )
   })
 
@@ -223,7 +277,10 @@ export function generateComafiTransferFile(transfers: Array<any>, data: Transfer
   // Transferencias
   transfers.forEach((transfer) => {
     lines.push(
-      `Transferencias al mismo titular $;DL0;${transfer.importe.toFixed(2).replace(".", ",")};VAR;${transfer.cuentaOrigen};${cuitDestino};${nombreOrdenante};NO;${transfer.cbuDestino};${cuitDestino};;;`,
+      `Transferencias al mismo titular $;DL0;${transfer.importe.toFixed(2).replace(
+        ".",
+        ",",
+      )};VAR;${transfer.cuentaOrigen};${cuitDestino};${nombreOrdenante};NO;${transfer.cbuDestino};${cuitDestino};;;`,
     )
   })
 
@@ -291,13 +348,8 @@ export function generateComafiEcheckFile(echecks: EcheckData[]): string {
         "1", // modo
         echeck.cuitBeneficiario, // cuit/cuil
         echeck.referencia, // nombre_beneficiario (usamos referencia como nombre)
-        echeck.importe
-          .toFixed(2)
-          .replace(".", ","), // monto con coma decimal
-        echeck.fechaPago
-          .split("-")
-          .reverse()
-          .join("/"), // fecha en formato DD/MM/YYYY
+        echeck.importe.toFixed(2).replace(".", ","), // monto con coma decimal
+        echeck.fechaPago.split("-").reverse().join("/"), // fecha en formato DD/MM/YYYY
         "Op Bursatil", // motivo_pago
         "", // cmc7 (vacío)
         echeck.email || "tesoreria@ad-cap.com.ar", // email
@@ -346,10 +398,7 @@ export function generateBindEcheckFile(echecks: EcheckData[]): string {
       echeck.importe.toFixed(2),
       "NO",
       "1",
-      echeck.fechaPago
-          .split("-")
-          .reverse()
-          .join("/"), // fecha en formato DD/MM/YYYY
+      echeck.fechaPago.split("-").reverse().join("/"), // fecha en formato DD/MM/YYYY
       "A la orden",
       "SI",
       "VAR",
@@ -359,6 +408,7 @@ export function generateBindEcheckFile(echecks: EcheckData[]): string {
 
   return [header, ...lines].join("\n")
 }
+
 // Función principal para generar archivos
 export function generateBankFile(
   banco: string,
@@ -393,8 +443,13 @@ export function generateBankFile(
         }
         break
       case "banco-comafi":
-        content = generateComafiTransferFile(transfers, data as TransferData)
-        filename = `MEP_COMAFI_${data.tipoTransferencia.replace("MEP-", "")}_${timestamp}.csv`
+        if (data.tipoTransferencia === "inmediata") {
+          content = generateComafiInmediataFile(transfers, data as TransferData)
+          filename = `INMEDIATA_COMAFI_${timestamp}.csv`
+        } else {
+          content = generateComafiTransferFile(transfers, data as TransferData)
+          filename = `MEP_COMAFI_${data.tipoTransferencia.replace("MEP-", "")}_${timestamp}.csv`
+        }
         break
       case "banco-comercio":
         content = generateComercioTransferFile(transfers)
