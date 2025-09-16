@@ -108,9 +108,23 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
         dateFormat: "YYYY-MM-DD",
       },
       "inmediata": {
-        fields: ["cbuOrigen", "cbuDestino", "importe", "concepto", "referencia"],
-        separator: ",",
-        dateFormat: "YYYY-MM-DD",
+        fields: [
+          "tipo",
+          "cantidad",
+          "documentoBeneficiario",
+          "destinatario",
+          "importe",
+          "fechaPago",
+          "cuentaCredito",
+          "cbuCredito",
+          "informacionAdicional",
+          "email",
+          "textoEmail",
+          "tipoCuentaCredito",
+          "concepto",
+        ],
+        separator: ";",
+        dateFormat: "DD/MM/YYYY",
       },
     },
     echeckFormat: {
@@ -164,6 +178,7 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
     },
   },
 }
+
 
 // CBUs precargados con CUIT asociado
 
