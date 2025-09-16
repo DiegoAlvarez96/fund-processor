@@ -107,6 +107,11 @@ export const BANK_CONFIGS: Record<string, BankConfig> = {
         separator: ",",
         dateFormat: "YYYY-MM-DD",
       },
+      "inmediata": {
+        fields: ["cbuOrigen", "cbuDestino", "importe", "concepto", "referencia"],
+        separator: ",",
+        dateFormat: "YYYY-MM-DD",
+      },
     },
     echeckFormat: {
       fields: [
