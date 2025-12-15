@@ -15,11 +15,11 @@ function numArAFloat(s: string): number | null {
 // Patrón para números argentinos: 1.234.567,89 / 0,00 / 1.698,010
 const NUM_PAT = "-?\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?|-?\\d+(?:,\\d+)?"
 const ROW_RE_LB = new RegExp(
-  `^(?P<cuenta>\\d{4})\\s*/\\s*(?P<sub>\\d{6,})\\s*` +
-    `(?P<codigo>[#*]?[A-Z0-9]+)\\s*` +
-    `(?P<moneda>Pesos|Dólar|Dolar|USD|U\\$S|Euros|Euro)\\s+` +
-    `(?P<n1>${NUM_PAT})\\s+(?P<n2>${NUM_PAT})\\s+(?P<n3>${NUM_PAT})\\s+` +
-    `(?P<n4>${NUM_PAT})\\s+(?P<n5>${NUM_PAT})\\s+(?P<n6>${NUM_PAT})`,
+  `^(\\d{4})\\s*\\/\\s*(\\d{6,})\\s*` +
+    `([#*]?[A-Z0-9]+)\\s*` +
+    `(Pesos|Dólar|Dolar|USD|U\\$S|Euros|Euro)\\s+` +
+    `(${NUM_PAT})\\s+(${NUM_PAT})\\s+(${NUM_PAT})\\s+` +
+    `(${NUM_PAT})\\s+(${NUM_PAT})\\s+(${NUM_PAT})`,
   "i",
 )
 
@@ -66,20 +66,18 @@ export async function convertirPdfLB(file: File): Promise<any[]> {
       // Normalizar espacios
       const normalizedLine = trimmedLine.replace(/ \/ /g, "/").replace(/ \//, "/").replace(/\/ /, "/")
 
-      // Intentar extraer con regex
       const match = normalizedLine.match(ROW_RE_LB)
-      if (match?.groups) {
-        const g = match.groups
+      if (match) {
         filas.push({
-          "Cuenta/Subcuenta": `${g.cuenta}/${g.sub}`,
-          Código: g.codigo,
-          Moneda: g.moneda,
-          Monto: numArAFloat(g.n1),
-          "S.I.": numArAFloat(g.n2),
-          "D.T.": numArAFloat(g.n3),
-          "D.T. Val.": numArAFloat(g.n4),
-          "D.T. Val. Prom.": numArAFloat(g.n5),
-          Importe: numArAFloat(g.n6),
+          "Cuenta/Subcuenta": `${match[1]}/${match[2]}`,
+          Código: match[3],
+          Moneda: match[4],
+          Monto: numArAFloat(match[5]),
+          "S.I.": numArAFloat(match[6]),
+          "D.T.": numArAFloat(match[7]),
+          "D.T. Val.": numArAFloat(match[8]),
+          "D.T. Val. Prom.": numArAFloat(match[9]),
+          Importe: numArAFloat(match[10]),
         })
       }
     }
