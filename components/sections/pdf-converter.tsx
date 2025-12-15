@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { Upload, Download, AlertCircle } from "lucide-react"
-import { convertirPdfLB, convertirPdfTitulosRF } from "@/lib/pdf-to-excel-converter"
 import * as XLSX from "xlsx"
 
 type ConversionType = "lb" | "titulos" | null
@@ -47,13 +46,21 @@ export default function PdfConverter() {
 
     setIsProcessing(true)
     try {
-      let filas: any[] = []
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      formData.append("type", conversionType)
 
-      if (conversionType === "lb") {
-        filas = await convertirPdfLB(selectedFile)
-      } else {
-        filas = await convertirPdfTitulosRF(selectedFile)
+      const response = await fetch("/api/convert-pdf", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error al procesar el PDF")
       }
+
+      const { filas } = await response.json()
 
       // Crear workbook
       const wb = XLSX.utils.book_new()
@@ -78,7 +85,9 @@ export default function PdfConverter() {
       // Descargar
       const fileName = `${conversionType === "lb" ? "CHEQUES_PAGARES" : "TITULOS_RF"}_${new Date().toISOString().split("T")[0]}.xlsx`
       const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" })
-      const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const blob = new Blob([wbout], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      })
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
