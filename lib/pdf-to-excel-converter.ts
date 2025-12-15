@@ -196,3 +196,6 @@ export async function convertirPdfTitulosRF(file: File): Promise<any[]> {
 
   return filas
 }
+
+// Este archivo se puede eliminar, pero se mantiene para referencia histórica
+export const deprecated = true
