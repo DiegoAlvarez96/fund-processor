@@ -12,6 +12,7 @@ import FundProcessor from "@/components/sections/FundProcessor"
 import TitulosProcessor from "@/components/sections/TitulosProcessor"
 import ConciliacionTransferencias from "@/components/sections/conciliacion-transferencias"
 import LoginModal from "@/components/sections/LoginModal"
+import PdfConverter from "@/components/sections/pdf-converter"
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -146,11 +147,12 @@ export default function Home() {
         </div>
 
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="bank-files">Archivos Bancarios</TabsTrigger>
             <TabsTrigger value="funds">Fondos FCI</TabsTrigger>
             <TabsTrigger value="titulos">Títulos</TabsTrigger>
+            <TabsTrigger value="pdf-converter">PDF → Excel</TabsTrigger>
             <TabsTrigger value="conciliacion">Conciliación</TabsTrigger>
           </TabsList>
 
@@ -182,6 +184,17 @@ export default function Home() {
 
           <TabsContent value="titulos">
             <TitulosProcessor />
+          </TabsContent>
+
+          <TabsContent value="pdf-converter">
+            <Card>
+              <CardHeader>
+                <CardTitle>Conversor PDF a Excel</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PdfConverter />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="conciliacion">
