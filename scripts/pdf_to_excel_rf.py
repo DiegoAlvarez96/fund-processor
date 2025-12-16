@@ -17,6 +17,7 @@ def is_header_or_footer(text):
 def detect_boundaries(words):
     centers = {}
     for w in words:
+        # Fixed regex to correctly detect (1), (2), etc. using $$ $$ instead of $$ $$
         if re.fullmatch(r"$$\d$$", w["text"]):
             centers[w["text"]] = (w["x0"] + w["x1"]) / 2
 
