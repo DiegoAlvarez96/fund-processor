@@ -1,5 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
-const pdfParse = require("pdf-parse")
+let pdfParse: any = null
+
+async function getPdfParser() {
+  if (!pdfParse) {
+    pdfParse = await import("pdf-parse")
+  }
+  return pdfParse.default || pdfParse
+}
 
 // Convertir número argentino a float
 function numArAFloat(s: string): number | null {
@@ -20,8 +27,9 @@ const ROW_RE_LB = new RegExp(
 )
 
 async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
+  const parser = await getPdfParser()
   const buffer = Buffer.from(arrayBuffer)
-  const pdf = await pdfParse(buffer)
+  const pdf = await parser(buffer)
   const filas: any[] = []
 
   const lines = pdf.text.split("\n")
@@ -64,8 +72,9 @@ async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
 }
 
 async function convertirPdfTitulosRF(arrayBuffer: ArrayBuffer): Promise<any[]> {
+  const parser = await getPdfParser()
   const buffer = Buffer.from(arrayBuffer)
-  const pdf = await pdfParse(buffer)
+  const pdf = await parser(buffer)
   const filas: any[] = []
 
   const HEADER_KILL_RE =
