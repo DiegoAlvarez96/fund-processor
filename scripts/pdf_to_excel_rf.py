@@ -117,5 +117,3 @@ if __name__ == "__main__":
     rows = convert_pdf_to_excel(pdf_path)
     print(json.dumps(rows, indent=2, default=str))
 
-
-asi esta ok ?
