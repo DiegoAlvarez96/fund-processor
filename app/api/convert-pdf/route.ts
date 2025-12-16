@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+// Import pdfjs-dist for server-side PDF parsing
+const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js")
+
 // Convertir número argentino a float
 function numArAFloat(s: string): number | null {
   s = (s || "").trim()
@@ -18,20 +21,35 @@ const ROW_RE_LB = new RegExp(
   "i",
 )
 
+// Extract text from PDF using pdfjs-dist
+async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
+  const pdf = await loadingTask.promise
+
+  let fullText = ""
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const textContent = await page.getTextContent()
+    const pageText = textContent.items.map((item: any) => item.str).join(" ")
+    fullText += pageText + "\n"
+  }
+
+  return fullText
+}
+
 async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
-  let pdfData: any
+  let text: string
   try {
-    const buffer = Buffer.from(arrayBuffer)
-    const pdfParseModule = await import("pdf-parse")
-    const pdfParse = pdfParseModule.default || pdfParseModule
-    pdfData = await pdfParse(buffer)
+    text = await extractTextFromPDF(arrayBuffer)
+    console.log("[v0] PDF text extracted, length:", text.length)
   } catch (e) {
+    console.error("[v0] PDF extraction error:", e)
     throw new Error(`No se pudo procesar el PDF: ${e}`)
   }
 
   const filas: any[] = []
 
-  const lines = pdfData.text.split("\n")
+  const lines = text.split("\n")
   for (const line of lines) {
     const trimmedLine = line.trim()
     if (!trimmedLine) continue
@@ -67,17 +85,17 @@ async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
     }
   }
 
+  console.log("[v0] LB rows extracted:", filas.length)
   return filas
 }
 
 async function convertirPdfTitulosRF(arrayBuffer: ArrayBuffer): Promise<any[]> {
-  let pdfData: any
+  let text: string
   try {
-    const buffer = Buffer.from(arrayBuffer)
-    const pdfParseModule = await import("pdf-parse")
-    const pdfParse = pdfParseModule.default || pdfParseModule
-    pdfData = await pdfParse(buffer)
+    text = await extractTextFromPDF(arrayBuffer)
+    console.log("[v0] PDF text extracted, length:", text.length)
   } catch (e) {
+    console.error("[v0] PDF extraction error:", e)
     throw new Error(`No se pudo procesar el PDF: ${e}`)
   }
 
@@ -91,7 +109,7 @@ async function convertirPdfTitulosRF(arrayBuffer: ArrayBuffer): Promise<any[]> {
     return !t || HEADER_KILL_RE.test(t)
   }
 
-  const lines = pdfData.text.split("\n")
+  const lines = text.split("\n")
   for (const line of lines) {
     const trimmedLine = line.trim()
     if (isHeaderOrFooter(trimmedLine)) continue
@@ -112,6 +130,7 @@ async function convertirPdfTitulosRF(arrayBuffer: ArrayBuffer): Promise<any[]> {
     }
   }
 
+  console.log("[v0] Titulos RF rows extracted:", filas.length)
   return filas
 }
 
@@ -120,6 +139,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get("file") as File
     const type = formData.get("type") as string
+
+    console.log("[v0] Processing PDF conversion:", { fileName: file?.name, type })
 
     if (!file || !type) {
       return NextResponse.json({ error: "Falta archivo o tipo de conversión" }, { status: 400 })
@@ -136,6 +157,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Tipo de conversión inválido" }, { status: 400 })
     }
 
+    console.log("[v0] Conversion successful, rows:", filas.length)
     return NextResponse.json({ filas, count: filas.length })
   } catch (error: any) {
     console.error("[v0] PDF conversion error:", error)
