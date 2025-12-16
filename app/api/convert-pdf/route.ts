@@ -1,11 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
-let pdfParse: any = null
+const pdfParse: any = null
 
 async function getPdfParser() {
-  if (!pdfParse) {
-    pdfParse = await import("pdf-parse")
-  }
-  return pdfParse.default || pdfParse
+  const pdfParse = await import("pdf-parse/lib/pdf.js").catch(() => import("pdf-parse").then((m) => m.default || m))
+  return pdfParse
 }
 
 // Convertir número argentino a float
@@ -27,12 +25,22 @@ const ROW_RE_LB = new RegExp(
 )
 
 async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
-  const parser = await getPdfParser()
+  const pdfjsLib = await getPdfParser()
   const buffer = Buffer.from(arrayBuffer)
-  const pdf = await parser(buffer)
+
+  // pdf-parse espera un buffer con getDocument
+  let pdfData: any
+  try {
+    // Intenta usar pdf-parse como librería
+    const pdfParse = await import("pdf-parse").then((m) => m.default)
+    pdfData = await pdfParse(buffer)
+  } catch (e) {
+    throw new Error(`No se pudo procesar el PDF: ${e}`)
+  }
+
   const filas: any[] = []
 
-  const lines = pdf.text.split("\n")
+  const lines = pdfData.text.split("\n")
   for (const line of lines) {
     const trimmedLine = line.trim()
     if (!trimmedLine) continue
@@ -72,9 +80,15 @@ async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
 }
 
 async function convertirPdfTitulosRF(arrayBuffer: ArrayBuffer): Promise<any[]> {
-  const parser = await getPdfParser()
-  const buffer = Buffer.from(arrayBuffer)
-  const pdf = await parser(buffer)
+  let pdfData: any
+  try {
+    const pdfParse = await import("pdf-parse").then((m) => m.default)
+    const buffer = Buffer.from(arrayBuffer)
+    pdfData = await pdfParse(buffer)
+  } catch (e) {
+    throw new Error(`No se pudo procesar el PDF: ${e}`)
+  }
+
   const filas: any[] = []
 
   const HEADER_KILL_RE =
@@ -85,7 +99,7 @@ async function convertirPdfTitulosRF(arrayBuffer: ArrayBuffer): Promise<any[]> {
     return !t || HEADER_KILL_RE.test(t)
   }
 
-  const lines = pdf.text.split("\n")
+  const lines = pdfData.text.split("\n")
   for (const line of lines) {
     const trimmedLine = line.trim()
     if (isHeaderOrFooter(trimmedLine)) continue
