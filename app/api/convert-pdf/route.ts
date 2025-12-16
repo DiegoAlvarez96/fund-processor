@@ -1,5 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
-const pdfParse = require("pdf-parse")
+let pdfParse: any = null
+
+async function getPdfParser() {
+  if (!pdfParse) {
+    // Importar dinámicamente para evitar problemas de bundling
+    const module = await import("pdf-parse/lib/pdf.js")
+    pdfParse = module.default || module
+  }
+  return pdfParse
+}
 
 // Convertir número argentino a float
 function numArAFloat(s: string): number | null {
@@ -23,7 +32,8 @@ async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
   let pdfData: any
   try {
     const buffer = Buffer.from(arrayBuffer)
-    pdfData = await pdfParse(buffer)
+    const pdf = require("pdf-parse/lib/pdf.js")
+    pdfData = await pdf.default(buffer)
   } catch (e) {
     throw new Error(`No se pudo procesar el PDF: ${e}`)
   }
@@ -73,7 +83,8 @@ async function convertirPdfTitulosRF(arrayBuffer: ArrayBuffer): Promise<any[]> {
   let pdfData: any
   try {
     const buffer = Buffer.from(arrayBuffer)
-    pdfData = await pdfParse(buffer)
+    const pdf = require("pdf-parse/lib/pdf.js")
+    pdfData = await pdf.default(buffer)
   } catch (e) {
     throw new Error(`No se pudo procesar el PDF: ${e}`)
   }
