@@ -1,8 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-// Import pdfjs-dist for server-side PDF parsing
-const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js")
-
 // Convertir número argentino a float
 function numArAFloat(s: string): number | null {
   s = (s || "").trim()
@@ -21,20 +18,29 @@ const ROW_RE_LB = new RegExp(
   "i",
 )
 
-// Extract text from PDF using pdfjs-dist
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
-  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
-  const pdf = await loadingTask.promise
+  const buffer = Buffer.from(arrayBuffer)
+  const text = buffer.toString("latin1")
 
-  let fullText = ""
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const textContent = await page.getTextContent()
-    const pageText = textContent.items.map((item: any) => item.str).join(" ")
-    fullText += pageText + "\n"
+  // Extract text between stream and endstream tags (simplified PDF parsing)
+  const streamPattern = /stream\s*([\s\S]*?)\s*endstream/g
+  let match
+  let extractedText = ""
+
+  while ((match = streamPattern.exec(text)) !== null) {
+    const streamContent = match[1]
+    // Remove non-printable characters but keep numbers, letters, and common symbols
+    const cleaned = streamContent.replace(/[^\x20-\x7E\xA0-\xFF]/g, " ")
+    extractedText += cleaned + "\n"
   }
 
-  return fullText
+  // If no streams found, try to extract plain text
+  if (!extractedText.trim()) {
+    extractedText = text.replace(/[^\x20-\x7E\xA0-\xFF]/g, " ")
+  }
+
+  console.log("[v0] PDF text extracted, length:", extractedText.length)
+  return extractedText
 }
 
 async function convertirPdfLB(arrayBuffer: ArrayBuffer): Promise<any[]> {
