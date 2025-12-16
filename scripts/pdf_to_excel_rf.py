@@ -260,9 +260,7 @@ def convert_pdf_to_xlsx(pdf_path: str, xlsx_path: str):
 
 
 if __name__ == "__main__":
-    import json
     pdf_path = sys.argv[1]
     xlsx_path = sys.argv[2] if len(sys.argv) > 2 else (pdf_path + ".xlsx")
     convert_pdf_to_xlsx(pdf_path, xlsx_path)
-    print(json.dumps({"ok": True, "xlsx_path": xlsx_path}))
-
+    print(xlsx_path)
