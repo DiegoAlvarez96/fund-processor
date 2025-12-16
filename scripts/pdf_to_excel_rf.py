@@ -1,29 +1,26 @@
 import re
 import sys
 import pdfplumber
-import pandas as pd
 
+HEADER_KILL_RE = re.compile(
+    r"CAJA DE VALORES|SISTEMA DE FACTURACIÓN|LISTADO|FECHA DE EMISIÓN|"
+    r"LIQUIDACION|DURANTE EL MES|DEPOSITANTE|COBRO CUSTODIA|"
+    r"Agente Depositario|Caja de Valores|HOJA NRO\.",
+    re.IGNORECASE
+)
 
-# -----------------------------
-# Detectores de sección (por página)
-# -----------------------------
-def is_resumen_page(text: str) -> bool:
-    t = (text or "").upper()
-    return ("RESUMEN DE LA" in t) and ("ARANCELES APLICADOS" in t)
+CMTE_RE = re.compile(r"^\d{7,10}$")
+NUM_TOKEN_RE = re.compile(r"^[\d\.\,]+$")  # 1.234,56 o 0,000 etc.
 
-def is_acreencias_page(text: str) -> bool:
-    t = (text or "").upper()
-    return ("ACREENCIAS" in t) and ("COMISION" in t)
+def is_header_or_footer(text: str) -> bool:
+    t = (text or "").strip()
+    return (not t) or bool(HEADER_KILL_RE.search(t))
 
-def is_rf_cobro_custodia_page(text: str) -> bool:
-    t = (text or "").upper()
-    return ("COBRO CUSTODIA" in t) and ("(" in t)  # luego validamos boundaries
-
-
-# -----------------------------
-# Utilidades RF (tu enfoque boundaries)
-# -----------------------------
 def detect_boundaries(words):
+    """
+    Busca los textos "(1)".."(6)" para armar boundaries de 7 columnas:
+    [CMTE] + 6 grupos.
+    """
     centers = {}
     for w in words:
         if re.fullmatch(r"\(\d+\)", w["text"]):
@@ -33,7 +30,7 @@ def detect_boundaries(words):
     if not all(k in centers for k in needed):
         return None
 
-    xs = [centers[k] for k in needed]
+    xs = [centers[k] for k in needed]  # orden (1)..(6)
     x_left = min(w["x0"] for w in words) - 5
     x_right = max(w["x1"] for w in words) + 5
 
@@ -41,7 +38,8 @@ def detect_boundaries(words):
     for a, b in zip(xs, xs[1:]):
         boundaries.append((a + b) / 2)
     boundaries.append(x_right)
-    return boundaries
+
+    return boundaries  # len = 8 => 7 columnas
 
 def col_for_x(x, boundaries):
     for i in range(len(boundaries) - 1):
@@ -49,17 +47,23 @@ def col_for_x(x, boundaries):
             return i
     return len(boundaries) - 2
 
-def _group_lines(words):
-    lines = {}
-    for w in words:
-        key = round(w["top"], 1)
-        lines.setdefault(key, []).append(w)
-    return [(k, sorted(ws, key=lambda x: x["x0"])) for k, ws in sorted(lines.items())]
-
-CMTE_RE = re.compile(r"^\d{7,10}$")
-NUM_TOKEN_RE = re.compile(r"^[\d\.\,]+$")
+def _line_to_cells(ws, boundaries):
+    """
+    Convierte una línea (lista de words ya ordenadas por x0)
+    a 7 celdas (CMTE + 6 grupos), juntando texto por celda.
+    """
+    cells = [""] * 7
+    for w in ws:
+        xc = (w["x0"] + w["x1"]) / 2
+        c = col_for_x(xc, boundaries)
+        c = max(0, min(6, c))
+        cells[c] = (cells[c] + " " + w["text"]).strip()
+    return cells
 
 def _first_numeric_token(s: str):
+    """
+    Devuelve el primer token numérico (tipo 0,000 / 1.234,56), si hay.
+    """
     if not s:
         return ""
     for tok in s.split():
@@ -67,200 +71,82 @@ def _first_numeric_token(s: str):
             return tok
     return ""
 
-def parse_rf_cobro_custodia_page(page, boundaries):
+def convert_pdf_to_excel(pdf_path: str):
     """
-    Devuelve filas por CMTE con 3 etapas:
-      SALDO / DIAS_TITULO / IMPORTE para (1)..(6)
+    Parseo para RF / LB45 / 'COBRO CUSTODIA':
+    Detecta header con (1)-(6) y arma filas por CMTE con 3 líneas:
+      - línea 0: SALDO INICIAL
+      - línea 1: DIAS/TITULO
+      - línea 2: IMPORTE
     """
     rows = []
-    words = page.extract_words(x_tolerance=2, y_tolerance=2)
-    for _, ws in _group_lines(words):
-        # arma 7 celdas (CMTE + 6 grupos)
-        cells = [""] * 7
-        for w in ws:
-            xc = (w["x0"] + w["x1"]) / 2
-            c = max(0, min(6, col_for_x(xc, boundaries)))
-            cells[c] = (cells[c] + " " + w["text"]).strip()
+    boundaries = None
 
-        first = (cells[0] or "").strip()
-
-        # ignorar líneas vacías
-        if not any(c.strip() for c in cells):
-            continue
-
-        # detectar inicio de CMTE
-        # guardamos estado en atributos de función (simple, sin clase)
-        if not hasattr(parse_rf_cobro_custodia_page, "_state"):
-            parse_rf_cobro_custodia_page._state = {"current": None, "stage": 0}
-
-        st = parse_rf_cobro_custodia_page._state
-
-        if CMTE_RE.match(first):
-            if st["current"] is not None:
-                rows.append(st["current"])
-            st["current"] = {"CMTE": first}
-            st["stage"] = 0
-
-        if st["current"] is None:
-            continue
-
-        # mapear por stage
-        for i in range(1, 7):
-            val = _first_numeric_token(cells[i])
-            if st["stage"] == 0:
-                st["current"][f"({i})_SALDO"] = val
-            elif st["stage"] == 1:
-                st["current"][f"({i})_DIAS_TITULO"] = val
-            else:
-                st["current"][f"({i})_IMPORTE"] = val
-
-        if any(_first_numeric_token(cells[i]) for i in range(1, 7)):
-            st["stage"] = min(2, st["stage"] + 1)
-
-    return rows
-
-
-# -----------------------------
-# Parser RESUMEN / ARANCELES APLICADOS
-# -----------------------------
-ARANCEL_RE = re.compile(r"^\s*(\d{2})\s+(.+?)\s+(\d+,\d+)\s*$")
-IMPORTE_RE = re.compile(r"^\s*(\d{2})\s+(\d[\d\.\,]+)\s*$")
-
-def parse_resumen_liquidacion_page(page):
-    """
-    Extrae:
-      - aranceles: 01  <desc>  0,17
-      - importes a pagar por: 01  1.994.741,48 (si aparecen)
-    """
-    text = page.extract_text() or ""
-    lines = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
-
-    out = []
-    in_aranceles = False
-    in_importes = False
-
-    for ln in lines:
-        u = ln.upper()
-
-        if "ARANCELES APLICADOS" in u:
-            in_aranceles = True
-            in_importes = False
-            continue
-
-        if "IMPORTES A PAGAR" in u:
-            in_importes = True
-            in_aranceles = False
-            continue
-
-        # cortar al cambiar de sección (por si hay otros bloques)
-        if "COBRO DE COMISIONES" in u or "COMISIONES POR ACREENCIAS" in u:
-            in_aranceles = False
-            in_importes = False
-
-        if in_aranceles:
-            m = ARANCEL_RE.match(ln)
-            if m:
-                cod, desc, alic = m.groups()
-                out.append({
-                    "tipo": "ARANCEL",
-                    "codigo": cod,
-                    "descripcion": desc.strip(),
-                    "alicuota": alic
-                })
-
-        if in_importes:
-            m = IMPORTE_RE.match(ln)
-            if m:
-                cod, importe = m.groups()
-                out.append({
-                    "tipo": "IMPORTE_A_PAGAR",
-                    "codigo": cod,
-                    "importe": importe
-                })
-
-    return out
-
-
-# -----------------------------
-# Parser ACREENCIAS (genérico, mejorable con un ejemplo)
-# -----------------------------
-def parse_acreencias_page(page):
-    """
-    Por ahora guarda líneas “útiles” crudas para no perder info.
-    Después lo afinamos con regex/columnas cuando tengas 1 ejemplo.
-    """
-    text = page.extract_text() or ""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-
-    out = []
-    capture = False
-    for ln in lines:
-        u = ln.upper()
-        if "COBRO DE COMISIONES POR ACREENCIAS" in u or "COMISIONES POR ACREENCIAS" in u:
-            capture = True
-            continue
-        if capture:
-            # cortar si cambia a otro bloque grande
-            if "RESUMEN DE LA" in u or "COBRO CUSTODIA" in u:
-                break
-            out.append({"linea": ln})
-    return out
-
-
-# -----------------------------
-# Conversión completa a XLSX multi-hoja
-# -----------------------------
-def convert_pdf_to_xlsx(pdf_path: str, xlsx_path: str):
-    rf_rows_all = []
-    resumen_rows_all = []
-    acreencias_rows_all = []
+    current = None
+    stage = 0  # 0=saldo, 1=dias, 2=importe
 
     with pdfplumber.open(pdf_path) as pdf:
-        boundaries = None
+        for page_i, page in enumerate(pdf.pages, start=1):
+            words = page.extract_words(x_tolerance=2, y_tolerance=2, keep_blank_chars=False)
 
-        # reset estado RF por corrida
-        if hasattr(parse_rf_cobro_custodia_page, "_state"):
-            delattr(parse_rf_cobro_custodia_page, "_state")
-
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-
-            if is_resumen_page(text):
-                resumen_rows_all.extend(parse_resumen_liquidacion_page(page))
-                continue
-
-            if is_acreencias_page(text):
-                acreencias_rows_all.extend(parse_acreencias_page(page))
-                continue
-
-            # RF cobro custodia (solo si detecta boundaries)
-            if is_rf_cobro_custodia_page(text):
+            # intentar detectar boundaries en la primera página donde aparezcan (1)-(6)
+            if boundaries is None:
+                boundaries = detect_boundaries(words)
                 if boundaries is None:
-                    words = page.extract_words(x_tolerance=2, y_tolerance=2)
-                    boundaries = detect_boundaries(words)
-                if boundaries is not None:
-                    rf_rows_all.extend(parse_rf_cobro_custodia_page(page, boundaries))
+                    continue  # todavía no llegamos a la página con el header de columnas
 
-        # flush final RF (si quedó current)
-        st = getattr(parse_rf_cobro_custodia_page, "_state", None)
-        if st and st.get("current") is not None:
-            rf_rows_all.append(st["current"])
+            # agrupar por línea (top)
+            lines = {}
+            for w in words:
+                key = round(w["top"], 1)
+                lines.setdefault(key, []).append(w)
 
-    # escribir xlsx
-    with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
-        if rf_rows_all:
-            pd.DataFrame(rf_rows_all).to_excel(writer, index=False, sheet_name="RF_COBRO_CUSTODIA")
-        if resumen_rows_all:
-            pd.DataFrame(resumen_rows_all).to_excel(writer, index=False, sheet_name="RESUMEN_LIQ")
-        if acreencias_rows_all:
-            pd.DataFrame(acreencias_rows_all).to_excel(writer, index=False, sheet_name="ACREENCIAS")
+            for _, ws in sorted(lines.items()):
+                ws = sorted(ws, key=lambda x: x["x0"])
+                text_line = " ".join(w["text"] for w in ws)
 
-    if not (rf_rows_all or resumen_rows_all or acreencias_rows_all):
-        raise ValueError("No se detectaron secciones RF / RESUMEN / ACREENCIAS en el PDF.")
+                if is_header_or_footer(text_line):
+                    continue
 
+                cells = _line_to_cells(ws, boundaries)
 
-if __name__ == "__main__":
-    pdf_path = sys.argv[1]
-    xlsx_path = sys.argv[2] if len(sys.argv) > 2 else (pdf_path + ".xlsx")
-    convert_pdf_to_xlsx(pdf_path, xlsx_path)
-    print(xlsx_path)
+                # ¿arranca un nuevo CMTE?
+                first = (cells[0] or "").strip()
+                if CMTE_RE.match(first):
+                    # guardar el anterior si estaba completo/usable
+                    if current is not None:
+                        rows.append(current)
+
+                    current = {"CMTE": first}
+                    stage = 0
+
+                # si todavía no tenemos CMTE, ignorar
+                if current is None:
+                    continue
+
+                # Mapear los 6 grupos según stage
+                # Cada grupo lo guardamos como token numérico (no todo el string pegado)
+                for i in range(1, 7):
+                    raw = cells[i]
+                    val = _first_numeric_token(raw)
+
+                    if stage == 0:
+                        current[f"({i})_SALDO"] = val
+                    elif stage == 1:
+                        current[f"({i})_DIAS_TITULO"] = val
+                    else:
+                        current[f"({i})_IMPORTE"] = val
+
+                # avanzar stage SOLO si la línea no era un header y tenía contenido numérico
+                # (evita “ruido”)
+                if any(_first_numeric_token(cells[i]) for i in range(1, 7)):
+                    stage = min(2, stage + 1)
+
+        # flush final
+        if current is not None:
+            rows.append(current)
+
+    if not rows:
+        raise ValueError("No se extrajeron filas COBRO CUSTODIA. ¿El PDF no tiene el cuadro CMTE/(1)-(6)?")
+
+    return rows
