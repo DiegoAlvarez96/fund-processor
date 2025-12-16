@@ -1,37 +1,36 @@
 import re
 import sys
-import json
 import pdfplumber
 
 HEADER_KILL_RE = re.compile(
     r"CAJA DE VALORES|SISTEMA DE FACTURACIÓN|LISTADO|FECHA DE EMISIÓN|"
     r"LIQUIDACION|DURANTE EL MES|DEPOSITANTE|COBRO CUSTODIA|"
-    r"Agente Depositario|Caja de Valores",
+    r"Agente Depositario|Caja de Valores|HOJA NRO\.",
     re.IGNORECASE
 )
 
-def is_header_or_footer(text):
-    t = text.strip()
-    return not t or HEADER_KILL_RE.search(t)
+CMTE_RE = re.compile(r"^\d{7,10}$")
+NUM_TOKEN_RE = re.compile(r"^[\d\.\,]+$")  # 1.234,56 o 0,000 etc.
+
+def is_header_or_footer(text: str) -> bool:
+    t = (text or "").strip()
+    return (not t) or bool(HEADER_KILL_RE.search(t))
 
 def detect_boundaries(words):
+    """
+    Busca los textos "(1)".."(6)" para armar boundaries de 7 columnas:
+    [CMTE] + 6 grupos.
+    """
     centers = {}
-
     for w in words:
-        # Detecta "(1)" "(2)" ... "(6)"
         if re.fullmatch(r"\(\d+\)", w["text"]):
             centers[w["text"]] = (w["x0"] + w["x1"]) / 2
-            print(f"[v0] Encontrada columna: {w['text']} en x={centers[w['text']]}",
-                  file=sys.stderr)
 
-    print(f"[v0] Columnas detectadas: {len(centers)}", file=sys.stderr)
-
-    # Queremos al menos (1)-(6)
     needed = [f"({i})" for i in range(1, 7)]
     if not all(k in centers for k in needed):
         return None
 
-    xs = [centers[k] for k in needed]  # en orden (1)..(6)
+    xs = [centers[k] for k in needed]  # orden (1)..(6)
     x_left = min(w["x0"] for w in words) - 5
     x_right = max(w["x1"] for w in words) + 5
 
@@ -40,8 +39,7 @@ def detect_boundaries(words):
         boundaries.append((a + b) / 2)
     boundaries.append(x_right)
 
-    return boundaries
-
+    return boundaries  # len = 8 => 7 columnas
 
 def col_for_x(x, boundaries):
     for i in range(len(boundaries) - 1):
@@ -49,29 +47,60 @@ def col_for_x(x, boundaries):
             return i
     return len(boundaries) - 2
 
+def _line_to_cells(ws, boundaries):
+    """
+    Convierte una línea (lista de words ya ordenadas por x0)
+    a 7 celdas (CMTE + 6 grupos), juntando texto por celda.
+    """
+    cells = [""] * 7
+    for w in ws:
+        xc = (w["x0"] + w["x1"]) / 2
+        c = col_for_x(xc, boundaries)
+        c = max(0, min(6, c))
+        cells[c] = (cells[c] + " " + w["text"]).strip()
+    return cells
+
+def _first_numeric_token(s: str):
+    """
+    Devuelve el primer token numérico (tipo 0,000 / 1.234,56), si hay.
+    """
+    if not s:
+        return ""
+    for tok in s.split():
+        if NUM_TOKEN_RE.match(tok):
+            return tok
+    return ""
+
 def convert_pdf_to_excel(pdf_path: str):
+    """
+    Parseo para RF / LB45 / 'COBRO CUSTODIA':
+    Detecta header con (1)-(6) y arma filas por CMTE con 3 líneas:
+      - línea 0: SALDO INICIAL
+      - línea 1: DIAS/TITULO
+      - línea 2: IMPORTE
+    """
     rows = []
+    boundaries = None
+
+    current = None
+    stage = 0  # 0=saldo, 1=dias, 2=importe
 
     with pdfplumber.open(pdf_path) as pdf:
-        boundaries = None
-
         for page_i, page in enumerate(pdf.pages, start=1):
-            words = page.extract_words(x_tolerance=2, y_tolerance=2)
+            words = page.extract_words(x_tolerance=2, y_tolerance=2, keep_blank_chars=False)
 
-            # 1) Detectar boundaries (una sola vez) pero intentando en varias páginas
+            # intentar detectar boundaries en la primera página donde aparezcan (1)-(6)
             if boundaries is None:
                 boundaries = detect_boundaries(words)
                 if boundaries is None:
-                    print(f"[v0] Página {page_i}: aún no aparecen columnas (1)-(6).", file=sys.stderr)
-                    continue  # importante: seguir a la próxima página
+                    continue  # todavía no llegamos a la página con el header de columnas
 
-            # 2) Agrupar words por línea (por coordenada top)
+            # agrupar por línea (top)
             lines = {}
             for w in words:
                 key = round(w["top"], 1)
                 lines.setdefault(key, []).append(w)
 
-            # 3) Convertir líneas a filas
             for _, ws in sorted(lines.items()):
                 ws = sorted(ws, key=lambda x: x["x0"])
                 text_line = " ".join(w["text"] for w in ws)
@@ -79,40 +108,45 @@ def convert_pdf_to_excel(pdf_path: str):
                 if is_header_or_footer(text_line):
                     continue
 
-                # 7 columnas: CMTE + (1) .. (6)
-                cols = [""] * 7
+                cells = _line_to_cells(ws, boundaries)
 
-                for w in ws:
-                    xc = (w["x0"] + w["x1"]) / 2
-                    col = col_for_x(xc, boundaries)
+                # ¿arranca un nuevo CMTE?
+                first = (cells[0] or "").strip()
+                if CMTE_RE.match(first):
+                    # guardar el anterior si estaba completo/usable
+                    if current is not None:
+                        rows.append(current)
 
-                    # asegurar rango por si col_for_x devuelve fuera
-                    if col < 0:
-                        col = 0
-                    if col > 6:
-                        col = 6
+                    current = {"CMTE": first}
+                    stage = 0
 
-                    cols[col] = (cols[col] + " " + w["text"]).strip()
+                # si todavía no tenemos CMTE, ignorar
+                if current is None:
+                    continue
 
-                # si la línea tiene algo, la guardamos
-                if any(c.strip() for c in cols):
-                    rows.append({
-                        "CMTE": cols[0],
-                        "(1)": cols[1],
-                        "(2)": cols[2],
-                        "(3)": cols[3],
-                        "(4)": cols[4],
-                        "(5)": cols[5],
-                        "(6)": cols[6],
-                    })
+                # Mapear los 6 grupos según stage
+                # Cada grupo lo guardamos como token numérico (no todo el string pegado)
+                for i in range(1, 7):
+                    raw = cells[i]
+                    val = _first_numeric_token(raw)
+
+                    if stage == 0:
+                        current[f"({i})_SALDO"] = val
+                    elif stage == 1:
+                        current[f"({i})_DIAS_TITULO"] = val
+                    else:
+                        current[f"({i})_IMPORTE"] = val
+
+                # avanzar stage SOLO si la línea no era un header y tenía contenido numérico
+                # (evita “ruido”)
+                if any(_first_numeric_token(cells[i]) for i in range(1, 7)):
+                    stage = min(2, stage + 1)
+
+        # flush final
+        if current is not None:
+            rows.append(current)
 
     if not rows:
-        raise ValueError("No se extrajeron filas. ¿El PDF está escaneado o no tiene tabla con (1)-(6)?")
+        raise ValueError("No se extrajeron filas COBRO CUSTODIA. ¿El PDF no tiene el cuadro CMTE/(1)-(6)?")
 
     return rows
-
-
-if __name__ == "__main__":
-    pdf_path = sys.argv[1]
-    rows = convert_pdf_to_excel(pdf_path)
-    print(json.dumps(rows, indent=2, default=str))
