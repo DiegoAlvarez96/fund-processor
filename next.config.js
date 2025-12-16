@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    serverComponentsExternalPackages: ['pdfjs-dist'],
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -9,7 +12,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: "standalone",
+  // Configuración para Render
+  output: 'standalone',
 }
 
-module.exports = nextConfig
+export default nextConfig
