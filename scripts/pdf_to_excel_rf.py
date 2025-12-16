@@ -16,12 +16,18 @@ def is_header_or_footer(text):
 
 def detect_boundaries(words):
     centers = {}
+    # Fixed regex from $$\d$$ to $$\d$$ to match literal parentheses like (1), (2), etc.
     for w in words:
-        # Fixed regex to correctly detect (1), (2), etc. using $$ $$ instead of $$ $$
         if re.fullmatch(r"$$\d$$", w["text"]):
             centers[w["text"]] = (w["x0"] + w["x1"]) / 2
+            print(f"[v0] Encontrada columna: {w['text']} en x={centers[w['text']]}", file=sys.stderr)
 
+    print(f"[v0] Columnas detectadas: {len(centers)}", file=sys.stderr)
+    
     if len(centers) < 6:
+        print(f"[v0] Solo se detectaron {len(centers)} columnas. Primeras 20 palabras:", file=sys.stderr)
+        for i, w in enumerate(words[:20]):
+            print(f"[v0]   {i}: '{w['text']}'", file=sys.stderr)
         return None
 
     xs = sorted(centers.values())
