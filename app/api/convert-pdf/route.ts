@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-const pdfParse = require("pdf-parse/lib/pdf-parse.js")
+const pdfParse = require("pdf-parse")
 
 // Convertir número argentino a float
 function numArAFloat(s: string): number | null {
