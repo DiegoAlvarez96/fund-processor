@@ -147,7 +147,7 @@ export default function PdfConverter() {
             >
               <h3 className="font-semibold text-lg mb-1">TITULOS RF</h3>
               <p className="text-sm text-gray-600">
-                Listados de Títulos Renta Fija con columnas detectadas automáticamente (1)-(6)
+                LB45 Listados de Títulos Renta Fija con columnas detectadas automáticamente (1)-(6)
               </p>
             </button>
           </div>
